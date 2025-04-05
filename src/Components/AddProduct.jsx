@@ -6,7 +6,7 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
   const { currentUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  
+
   // Form state
   const [formData, setFormData] = useState({
     name: "",
@@ -19,25 +19,36 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
     tags: "",
     features: "",
     image: null,
+    discount: "", // Added Discount field
     isFeature: false,
-    isNewArrival: false
+    isNewArrival: false,
   });
 
   // Categories options
   const categories = [
-    "Electronics", "Clothing", "Home & Kitchen", "Beauty", 
-    "Sports", "Books", "Toys", "Grocery"
+    "Electronics",
+    "Clothing",
+    "Home & Kitchen",
+    "Beauty",
+    "Sports",
+    "Books",
+    "Toys",
+    "Grocery",
   ];
 
   // Handle form input changes
   const handleChange = (e) => {
     const { name, value, type, checked, files } = e.target;
-    
-    setFormData(prev => ({
+
+    setFormData((prev) => ({
       ...prev,
-      [name]: type === "file" ? files[0] : 
-              type === "checkbox" ? checked :
-              type === "number" ? parseFloat(value) : value
+      [name]: type === "file"
+        ? files[0]
+        : type === "checkbox"
+        ? checked
+        : type === "number"
+        ? parseFloat(value)
+        : value,
     }));
   };
 
@@ -51,13 +62,13 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
       // Process tags and features as arrays
       const processedData = {
         ...formData,
-        tags: formData.tags.split(",").map(tag => tag.trim()),
-        features: formData.features.split(",").map(feature => feature.trim()),
-        createdBy: currentUser.uid
+        tags: formData.tags.split(",").map((tag) => tag.trim()),
+        features: formData.features.split(",").map((feature) => feature.trim()),
+        createdBy: currentUser.uid,
       };
-      
+
       await addProduct(processedData);
-      
+
       if (onProductAdded) {
         onProductAdded();
       }
@@ -69,19 +80,19 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
   };
 
   return (
-    <div className="card mb-4 mt-4 shadow-sm">
-      <div className="card-header bg-primary text-white">
+    <div className="card mb-4 mt-4 shadow-sm" style={{ maxWidth: "900px", margin: "0 auto" }}>
+      <div className="card-header bg-success text-white">
         <h4 className="mb-0">Add New Product</h4>
       </div>
       <div className="card-body">
         {error && <div className="alert alert-danger">{error}</div>}
-        
+
         <form onSubmit={handleSubmit}>
           <div className="row">
             {/* Basic Information */}
             <div className="col-md-6">
               <h5 className="border-bottom pb-2 mb-3">Basic Information</h5>
-              
+
               <div className="mb-3">
                 <label htmlFor="name" className="form-label">Product Name*</label>
                 <input
@@ -94,7 +105,7 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
                   required
                 />
               </div>
-              
+
               <div className="mb-3">
                 <label htmlFor="description" className="form-label">Description*</label>
                 <textarea
@@ -107,7 +118,7 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
                   required
                 />
               </div>
-              
+
               <div className="mb-3">
                 <label htmlFor="category" className="form-label">Category*</label>
                 <select
@@ -124,7 +135,7 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
                   ))}
                 </select>
               </div>
-              
+
               <div className="mb-3">
                 <label htmlFor="tags" className="form-label">Tags (comma separated)</label>
                 <input
@@ -138,11 +149,11 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
                 />
               </div>
             </div>
-            
+
             {/* Pricing & Inventory */}
             <div className="col-md-6">
               <h5 className="border-bottom pb-2 mb-3">Pricing & Inventory</h5>
-              
+
               <div className="row">
                 <div className="col-md-6 mb-3">
                   <label htmlFor="basePrice" className="form-label">Base Price*</label>
@@ -160,7 +171,7 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
                     />
                   </div>
                 </div>
-                
+
                 <div className="col-md-6 mb-3">
                   <label htmlFor="salePrice" className="form-label">Sale Price</label>
                   <div className="input-group">
@@ -177,7 +188,22 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
                   </div>
                 </div>
               </div>
-              
+
+              {/* Discount Field */}
+              <div className="mb-3">
+                <label htmlFor="discount" className="form-label">Discount (%)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  id="discount"
+                  name="discount"
+                  className="form-control"
+                  value={formData.discount}
+                  onChange={handleChange}
+                  placeholder="Enter discount percentage"
+                />
+              </div>
+
               <div className="row">
                 <div className="col-md-6 mb-3">
                   <label htmlFor="stock" className="form-label">Stock*</label>
@@ -191,7 +217,7 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
                     required
                   />
                 </div>
-                
+
                 <div className="col-md-6 mb-3">
                   <label htmlFor="weight" className="form-label">Weight (kg)</label>
                   <input
@@ -205,7 +231,7 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
                   />
                 </div>
               </div>
-              
+
               <div className="mb-3">
                 <label htmlFor="features" className="form-label">Key Features (comma separated)</label>
                 <input
@@ -218,7 +244,7 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
                   placeholder="waterproof, rechargeable, wireless"
                 />
               </div>
-              
+
               <div className="mb-3">
                 <label htmlFor="image" className="form-label">Product Image*</label>
                 <input
@@ -230,7 +256,7 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
                   required
                 />
               </div>
-              
+
               <div className="row">
                 <div className="col-md-6 mb-3">
                   <div className="form-check">
@@ -247,7 +273,7 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
                     </label>
                   </div>
                 </div>
-                
+
                 <div className="col-md-6 mb-3">
                   <div className="form-check">
                     <input
@@ -266,19 +292,19 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
               </div>
             </div>
           </div>
-          
+
           <div className="d-flex justify-content-end gap-2 mt-3">
-            <button 
-              type="button" 
-              className="btn btn-secondary" 
+            <button
+              type="button"
+              className="btn btn-secondary"
               onClick={onCancel}
               disabled={loading}
             >
               Cancel
             </button>
-            <button 
-              type="submit" 
-              className="btn btn-primary" 
+            <button
+              type="submit"
+              className="btn btn-success"
               disabled={loading}
             >
               {loading ? "Adding Product..." : "Add Product"}
