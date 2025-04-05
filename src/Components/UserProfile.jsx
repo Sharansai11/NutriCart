@@ -2,9 +2,9 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/Authcontext";
 import { getUserProfile, updateUserProfile } from "../api/userService";
-import { FaUser, FaEnvelope, FaPhone, FaMapMarkerAlt, FaEdit, FaSave, FaTimes } from "react-icons/fa";
+import { FaUser, FaEnvelope,FaArrowLeft, FaPhone, FaMapMarkerAlt, FaEdit, FaSave, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
-
+import { Link } from "react-router-dom";
 const UserProfile = () => {
   const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
@@ -126,8 +126,12 @@ const UserProfile = () => {
       <div className="row">
         <div className="col-lg-8 mx-auto">
           <div className="card border-0 shadow-sm">
-            <div className="card-header bg-dark text-white py-3">
+            <div className="card-header bg-dark d-flex justify-content-between  text-white py-3">
               <h5 className="mb-0">Your Profile</h5>
+              <Link to="/user-dashboard" className="btn btn-outline-light btn-sm">
+                                <FaArrowLeft className="me-2" />
+                                Continue Shopping
+                              </Link>
             </div>
             <div className="card-body">
               {error && <div className="alert alert-danger">{error}</div>}

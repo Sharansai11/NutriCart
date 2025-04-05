@@ -6,6 +6,7 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
   const { currentUser } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState(""); // New state for success message
 
   // Form state
   const [formData, setFormData] = useState({
@@ -28,7 +29,7 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
   const categories = [
     "Electronics",
     "Home Appliances",
-    "Fashion"
+    "Fashion",
   ];
 
   // Handle form input changes
@@ -51,20 +52,13 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
       const basePrice = parseFloat(formData.basePrice);
       const salePrice = parseFloat(formData.salePrice);
 
-      if (name === "basePrice" || name === "salePrice") {
-        const basePrice = parseFloat(formData.basePrice);
-        const salePrice = parseFloat(formData.salePrice);
-      
-        if (basePrice && salePrice) {
-          // Calculate the correct discount percentage
-          const discountPercentage = ((basePrice - salePrice) / basePrice) * 100;
-          setFormData((prev) => ({
-            ...prev,
-            discount: discountPercentage.toFixed(2), // Ensure correct decimal format
-          }));
-        }
+      if (basePrice && salePrice) {
+        const discountPercentage = ((basePrice - salePrice) / basePrice) * 100;
+        setFormData((prev) => ({
+          ...prev,
+          discount: discountPercentage.toFixed(2), // Set the discount dynamically
+        }));
       }
-      
     }
   };
 
@@ -85,6 +79,9 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
 
       await addProduct(processedData);
 
+      // Set success message after product is added
+      setSuccessMessage("Product added successfully!");
+
       if (onProductAdded) {
         onProductAdded();
       }
@@ -102,6 +99,10 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
       </div>
       <div className="card-body">
         {error && <div className="alert alert-danger">{error}</div>}
+
+        {successMessage && (
+          <div className="alert alert-success">{successMessage}</div> // Success message
+        )}
 
         <form onSubmit={handleSubmit}>
           <div className="row">
