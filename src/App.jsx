@@ -18,11 +18,12 @@ function App() {
           {/* <Navbar /> */}
           <Routes>
             {/* Public routes */}
+            {<Route path="/" element={<Home />} /> }
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             
             {/* Add more routes as you create components */}
-            {<Route path="/" element={<Home />} /> }
+            
            
          
            
