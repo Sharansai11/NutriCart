@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom"; // useNavigate for redirec
 import { useAuth } from "../context/Authcontext"; // Using the context API
 
 const Navbar = () => {
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, userRole } = useAuth(); // Using userRole to determine the role
   const navigate = useNavigate(); // Hook for redirection
 
   // Handle logout and redirect to home page
@@ -17,7 +17,7 @@ const Navbar = () => {
   };
 
   return (
-    <nav className="navbar navbar-expand-lg navbar-light"  style={{ background: "linear-gradient(90deg, #99BC85, #6F9B61)" }}>
+    <nav className="navbar navbar-expand-lg navbar-light" style={{ backgroundColor: "#7A72F3"}}>
       <div className="container-fluid">
         {/* Logo */}
         <Link className="navbar-brand text-uppercase fw-bold" to="/" style={{ fontSize: "1.8rem", color: "#fff" }}>
@@ -45,13 +45,37 @@ const Navbar = () => {
                 Home
               </Link>
             </li>
-           
+
             <li className="nav-item">
               <Link className="nav-link text-uppercase fw-bold" to="/about" style={{ color: "#fff" }}>
                 About Us
               </Link>
             </li>
-          
+
+            {currentUser && userRole === "user" && (
+              <li className="nav-item">
+                <Link
+                  className="nav-link text-uppercase fw-bold"
+                  to="/user-dashboard"
+                  style={{ color: "#fff" }}
+                >
+                  User Dashboard
+                </Link>
+              </li>
+            )}
+
+            {currentUser && userRole === "admin" && (
+              <li className="nav-item">
+                <Link
+                  className="nav-link text-uppercase fw-bold"
+                  to="/admin"
+                  style={{ color: "#fff" }}
+                >
+                  Admin Dashboard
+                </Link>
+              </li>
+            )}
+
             <li className="nav-item">
               {currentUser ? (
                 <>
