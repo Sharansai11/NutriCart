@@ -27,13 +27,8 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
   // Categories options
   const categories = [
     "Electronics",
-    "Clothing",
-    "Home & Kitchen",
-    "Beauty",
-    "Sports",
-    "Books",
-    "Toys",
-    "Grocery",
+    "Home Appliances",
+    "Fashion"
   ];
 
   // Handle form input changes
@@ -50,6 +45,27 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
         ? parseFloat(value)
         : value,
     }));
+
+    // Update discount dynamically based on basePrice and salePrice
+    if (name === "basePrice" || name === "salePrice") {
+      const basePrice = parseFloat(formData.basePrice);
+      const salePrice = parseFloat(formData.salePrice);
+
+      if (name === "basePrice" || name === "salePrice") {
+        const basePrice = parseFloat(formData.basePrice);
+        const salePrice = parseFloat(formData.salePrice);
+      
+        if (basePrice && salePrice) {
+          // Calculate the correct discount percentage
+          const discountPercentage = ((basePrice - salePrice) / basePrice) * 100;
+          setFormData((prev) => ({
+            ...prev,
+            discount: discountPercentage.toFixed(2), // Ensure correct decimal format
+          }));
+        }
+      }
+      
+    }
   };
 
   // Handle form submission
@@ -158,7 +174,7 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
                 <div className="col-md-6 mb-3">
                   <label htmlFor="basePrice" className="form-label">Base Price*</label>
                   <div className="input-group">
-                    <span className="input-group-text">$</span>
+                    <span className="input-group-text">₹</span>
                     <input
                       type="number"
                       step="0.01"
@@ -175,7 +191,7 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
                 <div className="col-md-6 mb-3">
                   <label htmlFor="salePrice" className="form-label">Sale Price</label>
                   <div className="input-group">
-                    <span className="input-group-text">$</span>
+                    <span className="input-group-text">₹</span>
                     <input
                       type="number"
                       step="0.01"
@@ -201,6 +217,7 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
                   value={formData.discount}
                   onChange={handleChange}
                   placeholder="Enter discount percentage"
+                  disabled
                 />
               </div>
 
