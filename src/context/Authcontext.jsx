@@ -1,5 +1,4 @@
-
-// src/contexts/AuthContext.js
+// src/contexts/AuthContext.jsx
 import { createContext, useContext, useState, useEffect } from "react";
 import { 
   createUserWithEmailAndPassword, 
@@ -9,7 +8,7 @@ import {
   updateProfile 
 } from "firebase/auth";
 import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
-import { auth, db } from "../api/firebaseConfig";
+import { auth, db } from "../api/firebaseConfig";  // Correct import of db as Firestore
 
 const AuthContext = createContext();
 
@@ -35,7 +34,7 @@ export function AuthProvider({ children }) {
         displayName: name
       });
       
-      // Create a user document in Firestore
+      // Create a user document in Firestore (using db)
       await setDoc(doc(db, "users", userCredential.user.uid), {
         email,
         displayName: name,
@@ -57,7 +56,7 @@ export function AuthProvider({ children }) {
       setError("");
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       
-      // Update last login time
+      // Update last login time in Firestore (using db)
       await setDoc(doc(db, "users", userCredential.user.uid), {
         lastLogin: serverTimestamp()
       }, { merge: true });
@@ -75,7 +74,7 @@ export function AuthProvider({ children }) {
     return signOut(auth);
   }
 
-  // Check user role
+  // Check user role (using db for Firestore)
   async function checkUserRole(userId) {
     try {
       const userDoc = await getDoc(doc(db, "users", userId));
@@ -124,4 +123,3 @@ export function AuthProvider({ children }) {
     </AuthContext.Provider>
   );
 }
-
