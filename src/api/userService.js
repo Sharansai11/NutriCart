@@ -526,3 +526,115 @@ export const getUserProfile = async (userId) => {
       throw error;
     }
   };
+
+
+
+
+  // amazon like features for recomendation 
+
+  /**
+ * Save search term to user's search history
+ * @param {string} userId - The user ID
+ * @param {string} searchTerm - The search term to save
+ * @returns {Promise<void>}
+ */
+export const saveSearchHistory = async (userId, searchTerm) => {
+    if (!userId || !searchTerm || searchTerm.trim() === "") return;
+    
+    try {
+      const userHistoryRef = doc(db, "userSearchHistory", userId);
+      const historySnap = await getDoc(userHistoryRef);
+      
+      const timestamp = new Date().toISOString();
+      
+      if (historySnap.exists()) {
+        // Get existing history and add new search term
+        const history = historySnap.data().searches || [];
+        
+        // Check if term already exists
+        const existingIndex = history.findIndex(item => item.term.toLowerCase() === searchTerm.toLowerCase());
+        
+        if (existingIndex !== -1) {
+          // Remove the existing entry to move it to the top
+          history.splice(existingIndex, 1);
+        }
+        
+        // Add to beginning of array (newest first)
+        history.unshift({
+          term: searchTerm,
+          timestamp: timestamp
+        });
+        
+        // Keep only the 10 most recent searches
+        const updatedHistory = history.slice(0, 10);
+        
+        await updateDoc(userHistoryRef, {
+          searches: updatedHistory,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        // Create new search history for user
+        await setDoc(userHistoryRef, {
+          userId: userId,
+          searches: [{
+            term: searchTerm,
+            timestamp: timestamp
+          }],
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        });
+      }
+    } catch (error) {
+      console.error("Error saving search history:", error);
+    }
+  };
+  
+  /**
+   * Get user's search history
+   * @param {string} userId - The user ID
+   * @returns {Promise<Array>} - Array of search history items
+   */
+  export const getSearchHistory = async (userId) => {
+    if (!userId) return [];
+    
+    try {
+      const userHistoryRef = doc(db, "userSearchHistory", userId);
+      const historySnap = await getDoc(userHistoryRef);
+      
+      if (historySnap.exists()) {
+        return historySnap.data().searches || [];
+      }
+      
+      return [];
+    } catch (error) {
+      console.error("Error getting search history:", error);
+      return [];
+    }
+  };
+  
+  /**
+   * Delete a search term from user's history
+   * @param {string} userId - The user ID
+   * @param {string} searchTerm - The search term to delete
+   * @returns {Promise<void>}
+   */
+  export const deleteSearchTerm = async (userId, searchTerm) => {
+    if (!userId || !searchTerm) return;
+    
+    try {
+      const userHistoryRef = doc(db, "userSearchHistory", userId);
+      const historySnap = await getDoc(userHistoryRef);
+      
+      if (historySnap.exists()) {
+        const history = historySnap.data().searches || [];
+        const updatedHistory = history.filter(item => item.term.toLowerCase() !== searchTerm.toLowerCase());
+        
+        await updateDoc(userHistoryRef, {
+          searches: updatedHistory,
+          updatedAt: serverTimestamp()
+        });
+      }
+    } catch (error) {
+      console.error("Error deleting search term:", error);
+    }
+  };
