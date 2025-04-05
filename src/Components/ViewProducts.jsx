@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { FaHeart, FaShoppingCart, FaSearch, FaFilter, FaStar } from "react-icons/fa";
-import { addToCart, addToWishlist } from "../api/userService";
+import { addToCart, addToWishlist, removeFromWishlist, isInWishlist } from "../api/userService";
 import { useAuth } from "../context/Authcontext";
 import { toast } from "react-toastify";
 
@@ -10,9 +10,42 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
   const [categoryFilter, setCategoryFilter] = useState("");
   const [priceSort, setPriceSort] = useState("");
   const [showFilters, setShowFilters] = useState(false);
+  const [wishlistItems, setWishlistItems] = useState([]);
+  const [checkingWishlist, setCheckingWishlist] = useState(true);
 
   // Get unique categories from products
   const categories = [...new Set(products.map((product) => product.category))];
+
+  // Check which products are in wishlist
+  useEffect(() => {
+    const checkWishlistItems = async () => {
+      if (!currentUser) {
+        setWishlistItems([]);
+        setCheckingWishlist(false);
+        return;
+      }
+
+      try {
+        const promises = products.map(product => 
+          isInWishlist(currentUser.uid, product.id)
+        );
+        
+        const results = await Promise.all(promises);
+        
+        const wishlistProductIds = products
+          .filter((_, index) => results[index])
+          .map(product => product.id);
+        
+        setWishlistItems(wishlistProductIds);
+      } catch (error) {
+        console.error("Error checking wishlist:", error);
+      } finally {
+        setCheckingWishlist(false);
+      }
+    };
+
+    checkWishlistItems();
+  }, [currentUser, products]);
 
   // Handle adding to cart
   const handleAddToCart = async (product) => {
@@ -29,18 +62,29 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
     }
   };
 
-  // Handle adding to wishlist
-  const handleAddToWishlist = async (product) => {
+  // Handle toggling wishlist
+  const handleToggleWishlist = async (product) => {
     try {
       if (!currentUser) {
-        toast.error("Please log in to add items to your wishlist");
+        toast.error("Please log in to use the wishlist");
         return;
       }
       
-      await addToWishlist(currentUser.uid, product.id);
-      toast.success(`${product.name} added to wishlist!`);
+      const isProductInWishlist = wishlistItems.includes(product.id);
+      
+      if (isProductInWishlist) {
+        // Remove from wishlist
+        await removeFromWishlist(currentUser.uid, product.id);
+        setWishlistItems(wishlistItems.filter(id => id !== product.id));
+        toast.success(`${product.name} removed from wishlist`);
+      } else {
+        // Add to wishlist
+        await addToWishlist(currentUser.uid, product.id);
+        setWishlistItems([...wishlistItems, product.id]);
+        toast.success(`${product.name} added to wishlist!`);
+      }
     } catch (error) {
-      toast.error("Failed to add to wishlist: " + error.message);
+      toast.error("Failed to update wishlist: " + error.message);
     }
   };
 
@@ -82,15 +126,6 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
       currency: "INR",
       maximumFractionDigits: 0,
     }).format(price);
-  };
-
-  // Calculate discount percentage if applicable
-  const calculateDiscount = (basePrice, currentPrice) => {
-    if (basePrice > currentPrice) {
-      const discount = ((basePrice - currentPrice) / basePrice) * 100;
-      return Math.round(discount);
-    }
-    return 0;
   };
 
   return (
@@ -174,7 +209,7 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
       </div>
 
       {/* Loading indicator */}
-      {loading && (
+      {(loading || checkingWishlist) && (
         <div className="text-center py-5">
           <div className="spinner-border text-dark" role="status">
             <span className="visually-hidden">Loading...</span>
@@ -184,7 +219,7 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
       )}
 
       {/* No products found */}
-      {!loading && filteredProducts.length === 0 && (
+      {!loading && !checkingWishlist && filteredProducts.length === 0 && (
         <div className="text-center py-5">
           <div className="mb-3">
             <img
@@ -201,99 +236,112 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
       )}
 
       {/* Products grid */}
-      <div className="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-        {filteredProducts.map((product) => (
-          <div key={product.id} className="col">
-            <div className="card h-100 shadow-sm border-0 rounded-3 overflow-hidden">
-              {/* Product badges */}
-              <div className="position-absolute d-flex justify-content-between w-100 px-3 pt-3 z-1">
-                {product.isNewArrival && (
-                  <span className="badge bg-dark rounded-pill px-3 py-2">
-                    NEW ARRIVAL
-                  </span>
-                )}
-                {calculateDiscount(product.basePrice, product.currentPrice) > 0 && (
-                  <span className="badge bg-danger rounded-pill ms-auto px-3 py-2">
-                    −{calculateDiscount(product.basePrice, product.currentPrice)}%
-                  </span>
-                )}
-              </div>
-              
-              {/* Product image */}
-              <div style={{ height: "280px", backgroundColor: "#f8f9fa" }}>
-                <img
-                  src={product.imageUrl || "https://placehold.co/400x400?text=No+Image"}
-                  className="w-100 h-100"
-                  alt={product.name}
-                  style={{ objectFit: "contain" }}
-                />
-              </div>
-              
-              {/* Product details */}
-              <div className="card-body d-flex flex-column">
-                <div className="mb-2">
-                  <span className="badge bg-secondary rounded-pill">{product.category}</span>
-                  {product.demandScore > 0 && (
-                    <span className="ms-2">
-                      <FaStar className="text-warning me-1" />
-                      <small>{product.demandScore}/10</small>
-                    </span>
-                  )}
-                </div>
-                
-                <h5 className="card-title fw-bold mb-1">{product.name}</h5>
-                
-                <p className="card-text small text-muted mb-3">
-                  {product.description.length > 60
-                    ? product.description.substring(0, 60) + "..."
-                    : product.description}
-                </p>
-                
-                <div className="mt-auto">
-                  <div className="d-flex align-items-center justify-content-between mb-3">
-                    <div>
-                      <h4 className="fw-bold mb-0">{formatCurrency(product.currentPrice)}</h4>
-                      {product.basePrice !== product.currentPrice && (
-                        <div>
-                          <span className="text-decoration-line-through text-muted">
-                            {formatCurrency(product.basePrice)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      {product.stock > 0 ? (
-                        <span className="badge bg-success px-3 py-2">IN STOCK</span>
-                      ) : (
-                        <span className="badge bg-danger px-3 py-2">OUT OF STOCK</span>
-                      )}
-                    </div>
+      {!loading && !checkingWishlist && (
+        <div className="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+          {filteredProducts.map((product) => {
+            // Check if product has discount
+            const hasDiscount = product.basePrice > product.currentPrice;
+            const discountPercentage = hasDiscount 
+              ? Math.round(((product.basePrice - product.currentPrice) / product.basePrice) * 100) 
+              : 0;
+            
+            // Check if product is in wishlist
+            const isInUserWishlist = wishlistItems.includes(product.id);
+            
+            return (
+              <div key={product.id} className="col">
+                <div className="card h-100 shadow-sm border-0 rounded-3 overflow-hidden">
+                  {/* Product badges */}
+                  <div className="position-absolute d-flex justify-content-between w-100 px-3 pt-3 z-1">
+                    {product.isNewArrival && (
+                      <span className="badge bg-dark rounded-pill px-3 py-2">
+                        NEW ARRIVAL
+                      </span>
+                    )}
+                    {hasDiscount && (
+                      <span className="badge bg-danger rounded-pill ms-auto px-3 py-2">
+                        −{discountPercentage}%
+                      </span>
+                    )}
                   </div>
                   
-                  {/* Action buttons */}
-                  <div className="d-flex gap-2">
-                    <button
-                      className="btn btn-dark flex-grow-1 d-flex align-items-center justify-content-center"
-                      onClick={() => handleAddToCart(product)}
-                      disabled={product.stock <= 0}
-                    >
-                      <FaShoppingCart className="me-2" />
-                      Add to Cart
-                    </button>
-                    <button
-                      className="btn btn-outline-danger"
-                      onClick={() => handleAddToWishlist(product)}
-                      title="Add to wishlist"
-                    >
-                      <FaHeart />
-                    </button>
+                  {/* Product image */}
+                  <div style={{ height: "280px", backgroundColor: "#f8f9fa" }}>
+                    <img
+                      src={product.imageUrl || "https://placehold.co/400x400?text=No+Image"}
+                      className="w-100 h-100"
+                      alt={product.name}
+                      style={{ objectFit: "contain" }}
+                    />
+                  </div>
+                  
+                  {/* Product details */}
+                  <div className="card-body d-flex flex-column">
+                    <div className="mb-2">
+                      <span className="badge bg-secondary rounded-pill">{product.category}</span>
+                      {product.demandScore > 0 && (
+                        <span className="ms-2">
+                          <FaStar className="text-warning me-1" />
+                          <small>{product.demandScore}/10</small>
+                        </span>
+                      )}
+                    </div>
+                    
+                    <h5 className="card-title fw-bold mb-1">{product.name}</h5>
+                    
+                    <p className="card-text small text-muted mb-3">
+                      {product.description.length > 60
+                        ? product.description.substring(0, 60) + "..."
+                        : product.description}
+                    </p>
+                    
+                    <div className="mt-auto">
+                      <div className="d-flex align-items-center justify-content-between mb-3">
+                        <div>
+                          <h4 className="fw-bold mb-0">{formatCurrency(product.currentPrice)}</h4>
+                          {hasDiscount && (
+                            <div>
+                              <span className="text-decoration-line-through text-muted">
+                                {formatCurrency(product.basePrice)}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          {product.stock > 0 ? (
+                            <span className="badge bg-success px-3 py-2">IN STOCK</span>
+                          ) : (
+                            <span className="badge bg-danger px-3 py-2">OUT OF STOCK</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Action buttons */}
+                      <div className="d-flex gap-2">
+                        <button
+                          className="btn btn-dark flex-grow-1 d-flex align-items-center justify-content-center"
+                          onClick={() => handleAddToCart(product)}
+                          disabled={product.stock <= 0}
+                        >
+                          <FaShoppingCart className="me-2" />
+                          Add to Cart
+                        </button>
+                        <button
+                          className={`btn ${isInUserWishlist ? 'btn-danger' : 'btn-outline-danger'}`}
+                          onClick={() => handleToggleWishlist(product)}
+                          title={isInUserWishlist ? "Remove from wishlist" : "Add to wishlist"}
+                        >
+                          <FaHeart />
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-        ))}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
