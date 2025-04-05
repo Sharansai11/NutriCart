@@ -23,7 +23,13 @@ const Login = () => {
       setErrorMessage("");
       setLoading(true);
       await login(email, password, selectedRole);
-      navigate("/admin"); // Redirect to home page after successful login
+
+      // Redirect based on the selected role
+      if (selectedRole === "user") {
+        navigate("/user-dashboard"); // Redirect to the user dashboard
+      } else if (selectedRole === "admin") {
+        navigate("/admin"); // Redirect to the admin dashboard
+      }
     } catch (error) {
       console.error("Login error:", error);
       setErrorMessage(
