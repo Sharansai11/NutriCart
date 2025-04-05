@@ -1,21 +1,38 @@
-import React, { useState, useEffect } from "react";
-import { FaHeart, FaShoppingCart, FaSearch, FaFilter, FaStar } from "react-icons/fa";
-import { addToCart, addToWishlist, removeFromWishlist, isInWishlist } from "../api/userService";
+import React, { useState, useEffect, useRef } from "react";
+import { FaHeart, FaShoppingCart, FaSearch, FaFilter, FaStar, FaTimes } from "react-icons/fa";
+import { 
+  addToCart, 
+  addToWishlist, 
+  removeFromWishlist, 
+  isInWishlist,
+  saveSearchHistory,
+  getSearchHistory,
+  deleteSearchTerm 
+} from "../api/userService";
 import { useAuth } from "../context/Authcontext";
 import { toast } from "react-toastify";
 
 const ViewProducts = ({ products = [], loading = false, error = "" }) => {
   const { currentUser } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
+  const [appliedSearchTerm, setAppliedSearchTerm] = useState(""); // Track the currently applied search
   const [categoryFilter, setCategoryFilter] = useState("");
   const [priceSort, setPriceSort] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [wishlistItems, setWishlistItems] = useState([]);
   const [checkingWishlist, setCheckingWishlist] = useState(true);
+  const [searchHistory, setSearchHistory] = useState([]);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const searchInputRef = useRef(null);
 
   // Get unique categories from products
   const categories = [...new Set(products.map((product) => product.category))];
 
+  const handleClearSearch = () => {
+    setAppliedSearchTerm("");
+    setSearchTerm("");
+  };
+  
   // Check which products are in wishlist
   useEffect(() => {
     const checkWishlistItems = async () => {
@@ -46,6 +63,88 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
 
     checkWishlistItems();
   }, [currentUser, products]);
+
+  // Load search history when component mounts
+  useEffect(() => {
+    const fetchSearchHistory = async () => {
+      if (currentUser) {
+        const history = await getSearchHistory(currentUser.uid);
+        setSearchHistory(history);
+      }
+    };
+
+    fetchSearchHistory();
+  }, [currentUser]);
+
+  // Handle search input focus
+  const handleSearchInputFocus = () => {
+    if (currentUser && searchHistory.length > 0) {
+      setShowSearchDropdown(true);
+    }
+  };
+
+  const handleSearchInputChange = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+    
+    // If search input is cleared, also clear the applied search term
+    if (!value.trim()) {
+      setAppliedSearchTerm("");
+    }
+  };
+
+  // Handle search input blur
+  const handleSearchInputBlur = () => {
+    // Delay hiding the dropdown to allow clicking on items
+    setTimeout(() => {
+      setShowSearchDropdown(false);
+    }, 200);
+  };
+
+  // Handle search form submission
+  const handleSearchSubmit = async (e) => {
+    e.preventDefault();
+    if (searchTerm.trim()) {
+      // Save search to history
+      if (currentUser) {
+        await saveSearchHistory(currentUser.uid, searchTerm);
+        // Refresh search history
+        const history = await getSearchHistory(currentUser.uid);
+        setSearchHistory(history);
+      }
+      
+      // Apply search term filter
+      setAppliedSearchTerm(searchTerm);
+      setShowSearchDropdown(false);
+    }
+  };
+
+  // Handle clicking on a search history item
+  const handleHistoryItemClick = async (term) => {
+    setSearchTerm(term);
+    setShowSearchDropdown(false);
+    
+    // Save to history and apply search
+    if (currentUser) {
+      await saveSearchHistory(currentUser.uid, term);
+      const history = await getSearchHistory(currentUser.uid);
+      setSearchHistory(history);
+    }
+    
+    // Apply search term immediately
+    setAppliedSearchTerm(term);
+  };
+
+  // Handle deleting a search term from history
+  const handleDeleteSearchTerm = async (e, term) => {
+    e.stopPropagation(); // Prevent triggering the parent click
+    if (currentUser) {
+      await deleteSearchTerm(currentUser.uid, term);
+      // Refresh search history
+      const history = await getSearchHistory(currentUser.uid);
+      setSearchHistory(history);
+    }
+  };
 
   // Handle adding to cart
   const handleAddToCart = async (product) => {
@@ -91,11 +190,11 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
   // Filter and sort products
   const filteredProducts = products
     .filter((product) => {
-      // Apply search term filter
+      // Apply search term filter (using appliedSearchTerm instead of searchTerm)
       if (
-        searchTerm &&
-        !product.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        !product.description.toLowerCase().includes(searchTerm.toLowerCase())
+        appliedSearchTerm &&
+        !product.name.toLowerCase().includes(appliedSearchTerm.toLowerCase()) &&
+        !product.description.toLowerCase().includes(appliedSearchTerm.toLowerCase())
       ) {
         return false;
       }
@@ -127,27 +226,116 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
       maximumFractionDigits: 0,
     }).format(price);
   };
-
   return (
     <div className="product-catalog">
       {error && <div className="alert alert-danger">{error}</div>}
-
+  
       {/* Search and filter bar */}
       <div className="mb-4">
         <div className="row g-3">
           <div className="col-md-6">
-            <div className="input-group">
-              <span className="input-group-text bg-dark text-white">
-                <FaSearch />
-              </span>
-              <input
-                type="text"
-                className="form-control border-dark"
-                placeholder="Search products..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
+            <form onSubmit={handleSearchSubmit}>
+              <div className="position-relative">
+                <div className="input-group">
+                  <span className="input-group-text bg-dark text-white">
+                    <FaSearch />
+                  </span>
+                  <input
+                    type="text"
+                    className="form-control border-dark"
+                    placeholder="Search products..."
+                    value={searchTerm}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSearchTerm(value);
+                      // If search bar is cleared manually, reset the applied search filter
+                      if (!value.trim()) {
+                        setAppliedSearchTerm("");
+                      }
+                    }}
+                    onFocus={handleSearchInputFocus}
+                    onBlur={handleSearchInputBlur}
+                    ref={searchInputRef}
+                  />
+                  <button 
+                    type="submit" 
+                    className="btn btn-dark" 
+                  >
+                    Search
+                  </button>
+                </div>
+                
+                {/* Search history dropdown - Amazon style */}
+                {showSearchDropdown && searchHistory.length > 0 && (
+                  <div 
+                    style={{
+                      position: 'absolute', 
+                      width: '100%', 
+                      marginTop: '2px', 
+                      backgroundColor: 'white', 
+                      border: '1px solid #dee2e6', 
+                      borderRadius: '4px', 
+                      boxShadow: '0 2px 5px rgba(0,0,0,0.15)', 
+                      zIndex: 1000
+                    }}
+                  >
+                    {searchHistory.map((item, index) => (
+                      <div 
+                        key={index}
+                        style={{
+                          display: 'flex', 
+                          justifyContent: 'space-between', 
+                          alignItems: 'center', 
+                          padding: '10px 15px', 
+                          borderBottom: index < searchHistory.length - 1 ? '1px solid #dee2e6' : 'none', 
+                          cursor: 'pointer'
+                        }}
+                        onClick={() => handleHistoryItemClick(item.term)}
+                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', color: '#551A8B' }}>
+                          <span>{item.term}</span>
+                        </div>
+                        <button 
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#6c757d',
+                            padding: '0',
+                            marginLeft: '15px',
+                            cursor: 'pointer'
+                          }}
+                          onClick={(e) => handleDeleteSearchTerm(e, item.term)}
+                          title="Remove from history"
+                        >
+                          <FaTimes />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </form>
+            
+            {/* Applied search term indicator */}
+            {appliedSearchTerm && (
+              <div className="mt-2">
+                <span className="text-muted">
+                  Search results for: <strong>"{appliedSearchTerm}"</strong>
+                </span>
+                <button 
+                  className="btn btn-sm text-danger border-0 ms-2"
+                  onClick={() => {
+                    setAppliedSearchTerm("");
+                    setSearchTerm("");
+                  }}
+                  style={{ padding: '0', background: 'none' }}
+                >
+                  <FaTimes /> Clear
+                </button>
+              </div>
+            )}
           </div>
           <div className="col-md-6 d-flex justify-content-end">
             <button
@@ -168,7 +356,6 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
             </select>
           </div>
         </div>
-
         {/* Expandable filters */}
         {showFilters && (
           <div className="row mt-3">
@@ -229,6 +416,11 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
             />
           </div>
           <h5>No products found</h5>
+          {appliedSearchTerm && (
+            <p className="text-muted">
+              No results for "{appliedSearchTerm}"
+            </p>
+          )}
           <p className="text-muted">
             Try adjusting your search or filter criteria
           </p>

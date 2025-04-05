@@ -472,6 +472,12 @@ export const getProductById = async (productId) => {
  * @param {Object} productData - The updated product data
  * @returns {Promise<void>}
  */
+/**
+ * Update an existing product
+ * @param {string} productId - The product ID
+ * @param {Object} productData - The updated product data
+ * @returns {Promise<void>}
+ */
 export const updateProduct = async (productId, productData) => {
   try {
     const productRef = doc(db, "products", productId);
@@ -496,11 +502,14 @@ export const updateProduct = async (productId, productData) => {
     // Update price history if price changed
     let priceHistory = existingProduct.priceHistory || [];
     if (priceChanged) {
-      priceHistory.push({
+      priceHistory.unshift({
         price: currentPrice,
         date: new Date().toISOString(),
-        reason: productData.priceChangeReason || "Manual update"
+        reason: productData.priceChangeReason || "Price update"
       });
+      
+      // Keep only the last 10 price changes
+      priceHistory = priceHistory.slice(0, 10);
     }
     
     // Format product data for update
@@ -511,20 +520,25 @@ export const updateProduct = async (productId, productData) => {
       salePrice: productData.salePrice ? parseFloat(productData.salePrice) : null,
       currentPrice: currentPrice,
       category: productData.category,
-      discount: productData.discount,
       stock: parseInt(productData.stock),
-      weight: productData.weight ? parseFloat(productData.weight) : existingProduct.weight,
+      weight: productData.weight ? parseFloat(productData.weight) : null,
       imageUrl: imageUrl,
-      tags: productData.tags || existingProduct.tags,
-      features: productData.features || existingProduct.features,
+      tags: productData.tags || [],
+      features: productData.features || [],
       isFeature: Boolean(productData.isFeature),
       isNewArrival: Boolean(productData.isNewArrival),
       priceHistory: priceHistory,
-      updatedAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
     };
+    
+    // Add lastPriceUpdate if price changed
+    if (priceChanged) {
+      updatedProduct.lastPriceUpdate = serverTimestamp();
+    }
     
     // Update in Firestore
     await updateDoc(productRef, updatedProduct);
+    return productId;
   } catch (error) {
     console.error("Error updating product:", error);
     throw error;
