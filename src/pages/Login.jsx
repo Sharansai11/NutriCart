@@ -1,5 +1,3 @@
-
-// src/pages/Login.jsx
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/Authcontext";
@@ -7,6 +5,7 @@ import { useAuth } from "../context/Authcontext";
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [selectedRole, setSelectedRole] = useState("user"); // Default role is "user"
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const { login, setError } = useAuth();
@@ -23,8 +22,8 @@ const Login = () => {
     try {
       setErrorMessage("");
       setLoading(true);
-      await login(email, password);
-      navigate("/"); // Redirect to home page after successful login
+      await login(email, password, selectedRole);
+      navigate("/admin"); // Redirect to home page after successful login
     } catch (error) {
       console.error("Login error:", error);
       setErrorMessage(
@@ -32,7 +31,7 @@ const Login = () => {
           ? "No account found with this email"
           : error.code === "auth/wrong-password"
           ? "Incorrect password"
-          : "Failed to log in. Please try again."
+          : error.message || "Failed to log in. Please try again."
       );
     } finally {
       setLoading(false);
@@ -92,6 +91,41 @@ const Login = () => {
                   />
                 </div>
 
+                {/* Radio Buttons for selecting role */}
+                <div className="mb-4">
+                  <label className="form-label">Login as:</label>
+                  <div>
+                    <div className="form-check form-check-inline">
+                      <input
+                        type="radio"
+                        id="roleUser"
+                        name="role"
+                        className="form-check-input"
+                        value="user"
+                        checked={selectedRole === "user"}
+                        onChange={(e) => setSelectedRole(e.target.value)}
+                      />
+                      <label className="form-check-label" htmlFor="roleUser">
+                        User
+                      </label>
+                    </div>
+                    <div className="form-check form-check-inline">
+                      <input
+                        type="radio"
+                        id="roleAdmin"
+                        name="role"
+                        className="form-check-input"
+                        value="admin"
+                        checked={selectedRole === "admin"}
+                        onChange={(e) => setSelectedRole(e.target.value)}
+                      />
+                      <label className="form-check-label" htmlFor="roleAdmin">
+                        Admin
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="d-grid">
                   <button
                     type="submit"
@@ -126,5 +160,3 @@ const Login = () => {
 };
 
 export default Login;
-
-

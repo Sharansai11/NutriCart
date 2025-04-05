@@ -1,20 +1,16 @@
-import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom"; // For navigation links
+import React from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "../context/Authcontext"; // Using the context API
 
 const Navbar = () => {
-  const [user, setUser] = useState(null); // State to manage signed-in user
+  const { currentUser, logout } = useAuth();
 
-  useEffect(() => {
-    // Check if a user is logged in by fetching from localStorage or a mock service
-    const loggedInUser = localStorage.getItem("user"); // Example of mocked login
-    if (loggedInUser) {
-      setUser(JSON.parse(loggedInUser)); // Set user state if logged in
+  const handleLogout = async () => {
+    try {
+      await logout();
+    } catch (error) {
+      console.error("Logout failed:", error);
     }
-  }, []);
-
-  const handleLogout = () => {
-    localStorage.removeItem("user"); // Remove user from localStorage
-    setUser(null); // Update user state to null
   };
 
   return (
@@ -43,14 +39,15 @@ const Navbar = () => {
             <li className="nav-item">
               <Link className="nav-link" to="/about">About</Link>
             </li>
-        
             <li className="nav-item">
-              {user ? (
-                <button className="btn btn-link nav-link" onClick={handleLogout}>Logout</button>
+              {currentUser ? (
+                <button className="btn btn-link nav-link" onClick={handleLogout}>
+                  Logout
+                </button>
               ) : (
                 <>
                   <Link className="nav-link" to="/login">Login</Link>
-                  <Link className="nav-link" to="/signup">Sign Up</Link>
+                  <Link className="nav-link" to="/register">Sign Up</Link>
                 </>
               )}
             </li>

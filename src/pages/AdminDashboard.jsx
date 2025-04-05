@@ -1,170 +1,173 @@
-import React, { useState } from "react";
-import { db, storage } from "../api/firebaseConfig"; // Corrected import of db and storage
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytesResumable } from "firebase/storage";
+import React, { useState, useEffect } from "react";
+import { useAuth } from "../context/Authcontext";
+import { getProducts, deleteProduct } from "../api/productService";
+import { FaPlus, FaTrash, FaEdit, FaEye } from "react-icons/fa";
+import AddProduct from "../Components/AddProduct";
 
 const AdminDashboard = () => {
-  const [productName, setProductName] = useState("");
-  const [description, setDescription] = useState("");
-  const [price, setPrice] = useState("");
-  const [category, setCategory] = useState("");
-  const [image, setImage] = useState(null);
-  const [stock, setStock] = useState("");
+  const { currentUser } = useAuth();
+  const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [showAddForm, setShowAddForm] = useState(false);
+  
+  // Load products on component mount
+  useEffect(() => {
+    loadProducts();
+  }, []);
 
-  // Handle product image upload to Firebase Storage
-  const handleImageUpload = (file) => {
-    return new Promise((resolve, reject) => {
-      const storageRef = ref(storage, `productImages/${file.name}`);
-      const uploadTask = uploadBytesResumable(storageRef, file);
-
-      uploadTask.on(
-        "state_changed",
-        (snapshot) => {
-          // Optionally track the progress of the upload here
-        },
-        (error) => {
-          reject(error); // Reject the promise if an error occurs
-        },
-        () => {
-          // On successful upload, get the image download URL
-          getDownloadURL(uploadTask.snapshot.ref)
-            .then((downloadURL) => {
-              resolve(downloadURL); // Return the download URL
-            })
-            .catch((error) => reject(error)); // Catch any errors during download URL fetch
-        }
-      );
-    });
-  };
-
-  // Handle form submission to add product
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
-    setSuccess("");
-
+  const loadProducts = async () => {
     try {
-      // Upload the product image and get the image URL
-      const imageUrl = image ? await handleImageUpload(image) : "";
-
-      // Add product details to Firestore (using db)
-      await addDoc(collection(db, "products"), {
-        name: productName,
-        description: description,
-        price: parseFloat(price),
-        category: category,
-        imageUrl: imageUrl, // Store image URL in Firestore
-        stock: parseInt(stock),
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        isActive: true,
-        createdBy: "admin_id", // Replace with actual admin ID from Firebase Auth
-      });
-
-      // Set success message and reset form fields
-      setSuccess("Product uploaded successfully!");
-      setProductName("");
-      setDescription("");
-      setPrice("");
-      setCategory("");
-      setImage(null);
-      setStock("");
-    } catch (error) {
-      setError("Error uploading product: " + error.message);
+      setLoading(true);
+      const productData = await getProducts();
+      setProducts(productData);
+    } catch (err) {
+      setError("Error loading products: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
+  // Handle product deletion
+  const handleDelete = async (productId) => {
+    if (window.confirm("Are you sure you want to delete this product?")) {
+      try {
+        setLoading(true);
+        await deleteProduct(productId);
+        
+        // Update product list
+        setProducts(products.filter(product => product.id !== productId));
+        setSuccess("Product deleted successfully!");
+      } catch (err) {
+        setError("Error deleting product: " + err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  // Handle after product is added
+  const handleProductAdded = async () => {
+    setSuccess("Product added successfully!");
+    setShowAddForm(false);
+    await loadProducts();
+  };
+
   return (
-    <div className="container mt-5">
-      <h2 className="mb-4">Admin Dashboard</h2>
+    <div className="container-fluid py-4">
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <h2>Product Management</h2>
+        <button 
+          className="btn btn-primary" 
+          onClick={() => setShowAddForm(!showAddForm)}
+        >
+          {showAddForm ? "Cancel" : <><FaPlus className="me-2" /> Add Product</>}
+        </button>
+      </div>
 
-      <div className="card p-4">
-        <h4>Upload New Product</h4>
-        {error && <div className="alert alert-danger">{error}</div>}
-        {success && <div className="alert alert-success">{success}</div>}
+      {error && <div className="alert alert-danger">{error}</div>}
+      {success && <div className="alert alert-success">{success}</div>}
 
-        <form onSubmit={handleSubmit}>
-          <div className="form-group mb-3">
-            <label htmlFor="productName">Product Name</label>
-            <input
-              type="text"
-              id="productName"
-              className="form-control"
-              value={productName}
-              onChange={(e) => setProductName(e.target.value)}
-              required
-            />
+      {/* Add Product Form */}
+      {showAddForm && (
+        <AddProduct 
+          onProductAdded={handleProductAdded} 
+          onCancel={() => setShowAddForm(false)}
+        />
+      )}
+
+      {/* Products Table */}
+      <div className="card shadow-sm">
+        <div className="card-header bg-white">
+          <h4 className="mb-0">Products</h4>
+        </div>
+        <div className="card-body p-0">
+          <div className="table-responsive">
+            <table className="table table-hover align-middle mb-0">
+              <thead className="table-light">
+                <tr>
+                  <th>Image</th>
+                  <th>Name</th>
+                  <th>Category</th>
+                  <th>Base Price</th>
+                  <th>Sale Price</th>
+                  <th>Stock</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading && (
+                  <tr>
+                    <td colSpan="7" className="text-center py-4">
+                      <div className="spinner-border text-primary" role="status">
+                        <span className="visually-hidden">Loading...</span>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                
+                {!loading && products.length === 0 && (
+                  <tr>
+                    <td colSpan="7" className="text-center py-4">
+                      No products found.
+                    </td>
+                  </tr>
+                )}
+                
+                {!loading &&
+                  products.map((product) => (
+                    <tr key={product.id}>
+                      <td>
+                        <img
+                          src={product.imageUrl || "https://via.placeholder.com/50"}
+                          alt={product.name}
+                          className="img-thumbnail"
+                          style={{ width: "50px", height: "50px", objectFit: "cover" }}
+                        />
+                      </td>
+                      <td>{product.name}</td>
+                      <td>{product.category}</td>
+                      <td>${parseFloat(product.basePrice).toFixed(2)}</td>
+                      <td>
+                        {product.salePrice
+                          ? `$${parseFloat(product.salePrice).toFixed(2)}`
+                          : "-"}
+                      </td>
+                      <td>
+                        <span className={`badge ${product.stock > 10 ? 'bg-success' : product.stock > 0 ? 'bg-warning' : 'bg-danger'}`}>
+                          {product.stock}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="btn-group">
+                          <button
+                            className="btn btn-sm btn-outline-primary"
+                            title="View"
+                          >
+                            <FaEye />
+                          </button>
+                          <button
+                            className="btn btn-sm btn-outline-secondary"
+                            title="Edit"
+                          >
+                            <FaEdit />
+                          </button>
+                          <button
+                            className="btn btn-sm btn-outline-danger"
+                            title="Delete"
+                            onClick={() => handleDelete(product.id)}
+                          >
+                            <FaTrash />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
           </div>
-
-          <div className="form-group mb-3">
-            <label htmlFor="description">Description</label>
-            <textarea
-              id="description"
-              className="form-control"
-              rows="4"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="form-group mb-3">
-            <label htmlFor="price">Price</label>
-            <input
-              type="number"
-              id="price"
-              className="form-control"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="form-group mb-3">
-            <label htmlFor="category">Category</label>
-            <input
-              type="text"
-              id="category"
-              className="form-control"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="form-group mb-3">
-            <label htmlFor="stock">Stock</label>
-            <input
-              type="number"
-              id="stock"
-              className="form-control"
-              value={stock}
-              onChange={(e) => setStock(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="form-group mb-3">
-            <label htmlFor="image">Product Image</label>
-            <input
-              type="file"
-              id="image"
-              className="form-control"
-              onChange={(e) => setImage(e.target.files[0])}
-              required
-            />
-          </div>
-
-          <button type="submit" className="btn btn-primary" disabled={loading}>
-            {loading ? "Uploading..." : "Upload Product"}
-          </button>
-        </form>
+        </div>
       </div>
     </div>
   );
