@@ -26,6 +26,294 @@ import {
  * @param {File} file - The image file to upload
  * @returns {Promise<string>} - The download URL of the uploaded image
  */
+
+// compititors 
+
+
+
+/**
+ * Update competitor data for a product by scraping Amazon and Flipkart
+ * @param {string} productId - The product ID
+ * @param {string} productName - The product name
+ * @param {string} keywords - Optional additional keywords to improve search results
+ * @returns {Promise<Object>} - The competitor data
+ */
+export const updateCompetitorData = async (productId, productName, keywords = "") => {
+  try {
+    // Use local Express server for scraping
+    const response = await fetch("http://localhost:3001/api/scrape-competitors", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        productId,
+        productName,
+        keywords
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Failed to update competitor data");
+    }
+    
+    const data = await response.json();
+    const competitorData = data.data;
+    
+    // Update the product document in Firestore with the scraped competitor data
+    const productRef = doc(db, "products", productId);
+    await updateDoc(productRef, {
+      competitorData: competitorData,
+      updatedAt: serverTimestamp()
+    });
+    
+    return competitorData;
+  } catch (error) {
+    console.error("Error updating competitor data:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get competitor data for a product
+ * @param {string} productId - The product ID
+ * @returns {Promise<Object>} - The competitor data or null if not available
+ */
+export const getCompetitorData = async (productId) => {
+  try {
+    const docRef = doc(db, "products", productId);
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      return docSnap.data().competitorData || null;
+    } else {
+      throw new Error("Product not found");
+    }
+  } catch (error) {
+    console.error("Error getting competitor data:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get the best prices from competitor data
+ * @param {Object} competitorData - The competitor data from Amazon and Flipkart
+ * @param {number} yourPrice - Your product price for comparison
+ * @returns {Object} - Object with best prices and comparison data
+ */
+export const analyzeCompetitorPrices = (competitorData, yourPrice) => {
+  if (!competitorData || !yourPrice) return null;
+  
+  let lowestPrice = {
+    price: Infinity,
+    source: "",
+    title: "",
+    url: "",
+    difference: 0
+  };
+  
+  let allPrices = [];
+  
+  // Process Amazon prices
+  if (competitorData.amazon?.products?.length > 0) {
+    competitorData.amazon.products.forEach(item => {
+      if (item.price && !isNaN(item.price)) {
+        allPrices.push({
+          price: item.price,
+          source: "Amazon",
+          title: item.title,
+          url: item.url,
+          difference: ((item.price - yourPrice) / yourPrice) * 100
+        });
+        
+        if (item.price < lowestPrice.price) {
+          lowestPrice = {
+            price: item.price,
+            source: "Amazon",
+            title: item.title,
+            url: item.url,
+            difference: ((item.price - yourPrice) / yourPrice) * 100
+          };
+        }
+      }
+    });
+  }
+  
+  // Process Flipkart prices
+  if (competitorData.flipkart?.products?.length > 0) {
+    competitorData.flipkart.products.forEach(item => {
+      if (item.price && !isNaN(item.price)) {
+        allPrices.push({
+          price: item.price,
+          source: "Flipkart",
+          title: item.title,
+          url: item.url,
+          difference: ((item.price - yourPrice) / yourPrice) * 100
+        });
+        
+        if (item.price < lowestPrice.price) {
+          lowestPrice = {
+            price: item.price,
+            source: "Flipkart",
+            title: item.title,
+            url: item.url,
+            difference: ((item.price - yourPrice) / yourPrice) * 100
+          };
+        }
+      }
+    });
+  }
+  
+  // Sort all prices
+  allPrices.sort((a, b) => a.price - b.price);
+  
+  // If no valid prices found
+  if (lowestPrice.price === Infinity) {
+    return {
+      lowestPrice: null,
+      allPrices: [],
+      averagePrice: 0,
+      priceRange: { min: 0, max: 0 },
+      competitiveness: "unknown"
+    };
+  }
+  
+  // Calculate average price
+  const sum = allPrices.reduce((total, item) => total + item.price, 0);
+  const averagePrice = allPrices.length > 0 ? sum / allPrices.length : 0;
+  
+  // Determine price range
+  const minPrice = allPrices.length > 0 ? allPrices[0].price : 0;
+  const maxPrice = allPrices.length > 0 ? allPrices[allPrices.length - 1].price : 0;
+  
+  // Determine competitiveness level
+  let competitiveness;
+  if (yourPrice < minPrice) {
+    competitiveness = "excellent"; // Your price is below all competitors
+  } else if (yourPrice < averagePrice) {
+    competitiveness = "good"; // Your price is below average
+  } else if (yourPrice <= maxPrice * 1.05) {
+    competitiveness = "fair"; // Your price is around the higher end of the market
+  } else {
+    competitiveness = "poor"; // Your price is significantly above market range
+  }
+  
+  return {
+    lowestPrice,
+    allPrices,
+    averagePrice,
+    priceRange: { min: minPrice, max: maxPrice },
+    competitiveness
+  };
+};
+
+/**
+ * Generate price optimization suggestions based on competitor analysis
+ * @param {Object} competitorAnalysis - The result of analyzeCompetitorPrices function
+ * @param {number} cost - Your product cost (if available)
+ * @returns {Object} - Optimization suggestions
+ */
+export const generatePriceOptimizationSuggestions = (competitorAnalysis, cost = 0) => {
+  if (!competitorAnalysis) return null;
+  
+  const { lowestPrice, averagePrice, priceRange, competitiveness } = competitorAnalysis;
+  
+  // If no competitor data found
+  if (!lowestPrice) {
+    return {
+      suggestion: "No competitor data available for price optimization",
+      recommendedPrice: null,
+      reason: "Insufficient data"
+    };
+  }
+  
+  let recommendedPrice;
+  let reason;
+  let profitMargin = null;
+  
+  switch (competitiveness) {
+    case "excellent":
+      // Already below market, could potentially increase price
+      recommendedPrice = Math.min(priceRange.min * 0.95, averagePrice * 0.9);
+      reason = "Your price is already competitive but could be optimized for better profitability";
+      break;
+      
+    case "good":
+      // Good position, maintain or slightly reduce
+      recommendedPrice = averagePrice * 0.95;
+      reason = "Maintain competitive edge with a price slightly below market average";
+      break;
+      
+    case "fair":
+      // Above average, reduce to improve competitiveness
+      recommendedPrice = averagePrice * 0.98;
+      reason = "Adjust price to be more competitive against market average";
+      break;
+      
+    case "poor":
+      // Significantly above market, reduce to match competition
+      recommendedPrice = averagePrice;
+      reason = "Consider reducing price to match market average for better competitiveness";
+      break;
+      
+    default:
+      recommendedPrice = averagePrice;
+      reason = "Align with market average based on available data";
+  }
+  
+  // If cost is available, ensure recommended price maintains minimum profit margin
+  if (cost && cost > 0) {
+    const minMargin = cost * 1.15; // Minimum 15% margin
+    
+    if (recommendedPrice < minMargin) {
+      recommendedPrice = minMargin;
+      reason = "Price set to maintain minimum profit margin based on cost";
+    }
+    
+    profitMargin = ((recommendedPrice - cost) / recommendedPrice) * 100;
+  }
+  
+  return {
+    suggestion: `Recommended price: ₹${recommendedPrice.toFixed(2)}`,
+    recommendedPrice: parseFloat(recommendedPrice.toFixed(2)),
+    reason,
+    profitMargin: profitMargin ? `${profitMargin.toFixed(2)}%` : null,
+    competitorReferencePrice: `₹${averagePrice.toFixed(2)} (market average)`
+  };
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 export const uploadProductImage = async (file) => {
   if (!file) return null;
   
