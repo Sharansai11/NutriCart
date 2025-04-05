@@ -14,6 +14,7 @@ import Cart from "./Components/Cart";
 import Wishlisht from "./Components/Wishlisht";
 import UserProfile from "./Components/UserProfile";
 import MyOrders from "./Components/MyOrders";
+import ViewProducts from "./Components/ViewProducts";
 function App() {
   return (
     <Router>
@@ -31,7 +32,8 @@ function App() {
             <Route path="/about" element={<About/>} />
             <Route path="admin/my-products" element={<Myproducts/>} />
             <Route path="/user-dashboard" element={<UserDashboard/>} />
-            <Route path="/admin/addproduct" element={<AddProduct/>} />
+            <Route path="/view-products" element={<   ViewProducts/>} />
+            <Route path="/addproduct" element={<AddProduct/>} />
             <Route path="/cart" element={<Cart/>} />
             <Route path="/my-orders" element={<MyOrders/>} />
             <Route path="/wishlist" element={<Wishlisht/>} />
