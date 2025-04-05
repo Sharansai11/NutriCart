@@ -7,6 +7,8 @@ import Home from "./pages/Home";
 import AdminDashboard from "./pages/AdminDashboard";
 import Navbar from "./Components/Navbar"; // Import Navbar component
 import AddProduct from "./Components/AddProduct";
+import Myproducts from "./Components/Myproducts";
+import About from "./pages/About"
 function App() {
   return (
     <Router>
@@ -21,6 +23,8 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/about" element={<About/>} />
+            <Route path="admin/my-products" element={<Myproducts/>} />
             <Route path="admin/addproduct" element={<AddProduct/>} />
             {/* Private routes */}
             {/* Admin route */}

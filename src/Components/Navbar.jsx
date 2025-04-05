@@ -45,21 +45,13 @@ const Navbar = () => {
                 Home
               </Link>
             </li>
-            <li className="nav-item">
-              <Link className="nav-link text-uppercase fw-bold" to="/products" style={{ color: "#fff" }}>
-                Products
-              </Link>
-            </li>
+           
             <li className="nav-item">
               <Link className="nav-link text-uppercase fw-bold" to="/about" style={{ color: "#fff" }}>
-                About
+                About Us
               </Link>
             </li>
-            <li className="nav-item">
-              <Link className="nav-link text-uppercase fw-bold" to="/contact" style={{ color: "#fff" }}>
-                Contact
-              </Link>
-            </li>
+          
             <li className="nav-item">
               {currentUser ? (
                 <>
