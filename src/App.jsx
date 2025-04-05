@@ -6,7 +6,7 @@ import Register from "./pages/Register";
 import Home from "./pages/Home";
 import AdminDashboard from "./pages/AdminDashboard";
 import Navbar from "./Components/Navbar"; // Import Navbar component
-
+import AddProduct from "./Components/AddProduct";
 function App() {
   return (
     <Router>
@@ -21,7 +21,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
-            
+            <Route path="admin/addproduct" element={<AddProduct/>} />
             {/* Private routes */}
             {/* Admin route */}
             <Route path="/admin" element={<AdminDashboard />} />

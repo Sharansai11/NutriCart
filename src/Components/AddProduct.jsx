@@ -69,7 +69,7 @@ const AddProduct = ({ onProductAdded, onCancel }) => {
   };
 
   return (
-    <div className="card mb-4 shadow-sm">
+    <div className="card mb-4 mt-4 shadow-sm">
       <div className="card-header bg-primary text-white">
         <h4 className="mb-0">Add New Product</h4>
       </div>

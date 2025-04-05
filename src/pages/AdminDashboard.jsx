@@ -2,8 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/Authcontext";
 import { getProducts, deleteProduct } from "../api/productService";
 import { FaPlus, FaTrash, FaEdit, FaEye } from "react-icons/fa";
-import AddProduct from "../Components/AddProduct";
-
+import { Link } from "react-router-dom";
 const AdminDashboard = () => {
   const { currentUser } = useAuth();
   const [products, setProducts] = useState([]);
@@ -58,25 +57,12 @@ const AdminDashboard = () => {
     <div className="container-fluid py-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2>Product Management</h2>
-        <button 
-          className="btn btn-primary" 
-          onClick={() => setShowAddForm(!showAddForm)}
-        >
-          {showAddForm ? "Cancel" : <><FaPlus className="me-2" /> Add Product</>}
-        </button>
+        <Link to="addproduct" className="btn btn-primary">
+      <FaPlus className="me-2" /> Add Product
+    </Link>
       </div>
 
-      {error && <div className="alert alert-danger">{error}</div>}
-      {success && <div className="alert alert-success">{success}</div>}
-
-      {/* Add Product Form */}
-      {showAddForm && (
-        <AddProduct 
-          onProductAdded={handleProductAdded} 
-          onCancel={() => setShowAddForm(false)}
-        />
-      )}
-
+     
       {/* Products Table */}
       <div className="card shadow-sm">
         <div className="card-header bg-white">

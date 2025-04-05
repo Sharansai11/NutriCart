@@ -42,10 +42,10 @@ const Login = () => {
     <div className="container py-5">
       <div className="row justify-content-center">
         <div className="col-md-6 col-lg-5">
-          <div className="card shadow">
+          <div className="card shadow-lg border-light rounded">
             <div className="card-body p-5">
               <div className="text-center mb-4">
-                <h2 className="fw-bold mb-0">Welcome Back</h2>
+                <h2 className="fw-bold mb-0" style={{ color: "#99BC85" }}>Welcome Back</h2>
                 <p className="text-muted">Sign in to continue shopping</p>
               </div>
 
@@ -57,9 +57,7 @@ const Login = () => {
 
               <form onSubmit={handleSubmit}>
                 <div className="mb-3">
-                  <label htmlFor="email" className="form-label">
-                    Email Address
-                  </label>
+                  <label htmlFor="email" className="form-label">Email Address</label>
                   <input
                     type="email"
                     className="form-control form-control-lg"
@@ -73,12 +71,8 @@ const Login = () => {
 
                 <div className="mb-4">
                   <div className="d-flex justify-content-between align-items-center">
-                    <label htmlFor="password" className="form-label">
-                      Password
-                    </label>
-                    <Link to="/forgot-password" className="text-decoration-none small">
-                      Forgot password?
-                    </Link>
+                    <label htmlFor="password" className="form-label">Password</label>
+                    <Link to="/forgot-password" className="text-decoration-none small">Forgot password?</Link>
                   </div>
                   <input
                     type="password"
@@ -105,9 +99,7 @@ const Login = () => {
                         checked={selectedRole === "user"}
                         onChange={(e) => setSelectedRole(e.target.value)}
                       />
-                      <label className="form-check-label" htmlFor="roleUser">
-                        User
-                      </label>
+                      <label className="form-check-label" htmlFor="roleUser">User</label>
                     </div>
                     <div className="form-check form-check-inline">
                       <input
@@ -119,9 +111,7 @@ const Login = () => {
                         checked={selectedRole === "admin"}
                         onChange={(e) => setSelectedRole(e.target.value)}
                       />
-                      <label className="form-check-label" htmlFor="roleAdmin">
-                        Admin
-                      </label>
+                      <label className="form-check-label" htmlFor="roleAdmin">Admin</label>
                     </div>
                   </div>
                 </div>
@@ -131,6 +121,11 @@ const Login = () => {
                     type="submit"
                     className="btn btn-primary btn-lg"
                     disabled={loading}
+                    style={{
+                      background: "#99BC85", 
+                      borderColor: "#6F9B61",
+                      fontSize: "1.1rem",
+                    }}
                   >
                     {loading ? (
                       <div className="spinner-border spinner-border-sm" role="status">
@@ -146,7 +141,7 @@ const Login = () => {
               <div className="text-center mt-4">
                 <p className="mb-0">
                   Don't have an account?{" "}
-                  <Link to="/register" className="text-decoration-none fw-semibold">
+                  <Link to="/register" className="text-decoration-none fw-semibold" style={{ color: "#99BC85" }}>
                     Create Account
                   </Link>
                 </p>
