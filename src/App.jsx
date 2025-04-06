@@ -39,8 +39,7 @@ function App() {
             <Route path="/view-product/:id" element={<ViewProduct />} />
             <Route path="/edit-product/:id" element={<EditProduct />} />
             <Route path="/admin/addproduct" element={<AddProduct />} />
-            <Route path="/addproduct" element={<AddProduct/>} />
-            
+          
             {/* User account routes */}
             <Route path="/user-dashboard" element={<UserDashboard/>} />
             <Route path="/view-products" element={<ViewProducts/>} />
