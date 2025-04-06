@@ -54,9 +54,7 @@ const UserDashboard = () => {
       <div className="row">
         {/* Sidebar */}
         <div
-          className={`col-md-3 col-lg-2 d-md-block bg-dark sidebar collapse ${
-            isSidebarCollapsed ? "collapsed" : "show"
-          }`}
+          className={`col-md-3 col-lg-2 d-md-block bg-dark sidebar collapse ${isSidebarCollapsed ? "collapsed" : "show"}`}
           style={{
             position: "sticky",
             top: "56px",
@@ -80,9 +78,7 @@ const UserDashboard = () => {
             <ul className="nav flex-column">
               <li className="nav-item">
                 <button
-                  className={`nav-link btn btn-link text-start w-100 ${
-                    activeTab === "products" ? "active bg-light text-dark" : "text-white"
-                  }`}
+                  className={`nav-link btn btn-link text-start w-100 ${activeTab === "products" ? "active bg-light text-dark" : "text-white"}`}
                   onClick={() => setActiveTab("products")}
                 >
                   <FaHome className="me-2" />
@@ -92,9 +88,7 @@ const UserDashboard = () => {
               <li className="nav-item">
                 <Link
                   to="/cart"
-                  className={`nav-link btn btn-link text-start w-100 ${
-                    activeTab === "cart" ? "active bg-light text-dark" : "text-white"
-                  }`}
+                  className={`nav-link btn btn-link text-start w-100 ${activeTab === "cart" ? "active bg-light text-dark" : "text-white"}`}
                 >
                   <FaShoppingCart className="me-2" />
                   <span className={isSidebarCollapsed ? "d-none" : ""}>Cart</span>
@@ -103,9 +97,7 @@ const UserDashboard = () => {
               <li className="nav-item">
                 <Link
                   to="/wishlist"
-                  className={`nav-link btn btn-link text-start w-100 ${
-                    activeTab === "wishlist" ? "active bg-light text-dark" : "text-white"
-                  }`}
+                  className={`nav-link btn btn-link text-start w-100 ${activeTab === "wishlist" ? "active bg-light text-dark" : "text-white"}`}
                 >
                   <FaHeart className="me-2" />
                   <span className={isSidebarCollapsed ? "d-none" : ""}>Wishlist</span>
@@ -114,9 +106,7 @@ const UserDashboard = () => {
               <li className="nav-item">
                 <Link
                   to="/my-orders"
-                  className={`nav-link btn btn-link text-start w-100 ${
-                    activeTab === "orders" ? "active bg-light text-dark" : "text-white"
-                  }`}
+                  className={`nav-link btn btn-link text-start w-100 ${activeTab === "orders" ? "active bg-light text-dark" : "text-white"}`}
                 >
                   <FaBox className="me-2" />
                   <span className={isSidebarCollapsed ? "d-none" : ""}>My Orders</span>
@@ -125,9 +115,7 @@ const UserDashboard = () => {
               <li className="nav-item">
                 <Link
                   to="/user-profile"
-                  className={`nav-link btn btn-link text-start w-100 ${
-                    activeTab === "profile" ? "active bg-light text-dark" : "text-white"
-                  }`}
+                  className={`nav-link btn btn-link text-start w-100 ${activeTab === "profile" ? "active bg-light text-dark" : "text-white"}`}
                 >
                   <FaUser className="me-2" />
                   <span className={isSidebarCollapsed ? "d-none" : ""}>Profile</span>
@@ -138,17 +126,13 @@ const UserDashboard = () => {
         </div>
 
         {/* Main content */}
-        <div
-          className={`col-md-9 col-lg-10 ms-sm-auto px-md-4 py-4 ${
-            isSidebarCollapsed ? "expanded" : ""
-          }`}
-        >
+        <div className={`col-md-9 col-lg-10 ms-sm-auto px-md-4 py-4 ${isSidebarCollapsed ? "expanded" : ""}`}>
           {/* Page title */}
           <div className="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
             <h2>{activeTab === "products" ? "Products" : "Dashboard"}</h2>
             <div className="btn-toolbar mb-2 mb-md-0">
               <div className="btn-group me-2">
-                <button 
+                <button
                   className="d-md-none btn btn-sm btn-outline-dark"
                   onClick={toggleSidebar}
                 >

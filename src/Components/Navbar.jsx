@@ -65,6 +65,8 @@ const Navbar = () => {
             )}
 
             {currentUser && userRole === "admin" && (
+
+              <ul className="navbar-nav">
               <li className="nav-item">
                 <Link
                   className="nav-link text-uppercase fw-bold"
@@ -74,6 +76,27 @@ const Navbar = () => {
                   Admin Dashboard
                 </Link>
               </li>
+              <li className="nav-item">
+                <Link
+                  className="nav-link text-uppercase fw-bold"
+                  to="/admin/my-products"
+                  style={{ color: "#fff" }}
+                >
+                 Products
+                </Link>
+              </li>
+              <li className="nav-item">
+                <Link
+                  className="nav-link text-uppercase fw-bold"
+                  to="/admin/orders"
+                  style={{ color: "#fff" }}
+                >
+                  Orders
+                </Link>
+              </li>
+</ul>
+              
+              
             )}
 
             <li className="nav-item">
