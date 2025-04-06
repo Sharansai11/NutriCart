@@ -19,6 +19,231 @@ import {
   increment
 } from "firebase/firestore";
 
+
+// Get all items in the user's cart with product details
+export const getCartItems = async (userId) => {
+  try {
+    const cartRef = collection(db, 'users', userId, 'cart');
+    const querySnapshot = await getDocs(cartRef);
+    
+    const cartItems = [];
+    const productPromises = [];
+    
+    // Rename the parameter to avoid conflict with the Firestore 'doc' function
+    querySnapshot.forEach((cartDoc) => {
+      const item = {
+        id: cartDoc.id,
+        productId: cartDoc.data().productId,
+        quantity: cartDoc.data().quantity,
+        addedAt: cartDoc.data().addedAt
+      };
+      
+      cartItems.push(item);
+      
+      // Use the Firestore 'doc' function correctly now
+      const productPromise = getDoc(doc(db, 'products', item.productId))
+        .then(productDoc => {
+          if (productDoc.exists()) {
+            return { id: productDoc.id, ...productDoc.data() };
+          }
+          return null;
+        });
+      
+      productPromises.push(productPromise);
+    });
+    
+    const products = await Promise.all(productPromises);
+    
+    return cartItems.map((item, index) => ({
+      ...item,
+      product: products[index] || { 
+        id: item.productId, 
+        name: 'Product not found', 
+        currentPrice: 0,
+        imageUrl: null
+      }
+    }));
+  } catch (error) {
+    console.error('Error getting cart items:', error);
+    throw error;
+  }
+};
+
+// Update quantity of an item in the cart
+export const updateCartItemQuantity = async (userId, cartItemId, quantity) => {
+  try {
+    const cartItemRef = doc(db, 'users', userId, 'cart', cartItemId);
+    await updateDoc(cartItemRef, {
+      quantity: quantity
+    });
+  } catch (error) {
+    console.error('Error updating cart item quantity:', error);
+    throw error;
+  }
+};
+
+
+
+// Clear the entire cart
+export const clearCart = async (userId) => {
+  try {
+    const cartRef = collection(db, 'users', userId, 'cart');
+    const querySnapshot = await getDocs(cartRef);
+    
+    const deletePromises = [];
+    querySnapshot.forEach((doc) => {
+      deletePromises.push(deleteDoc(doc.ref));
+    });
+    
+    await Promise.all(deletePromises);
+  } catch (error) {
+    console.error('Error clearing cart:', error);
+    throw error;
+  }
+};
+
+// Create a new order
+export const createOrder = async (userId, orderData) => {
+  try {
+    // Add order to user's orders collection
+    const ordersRef = collection(db, 'users', userId, 'orders');
+    const orderRef = await addDoc(ordersRef, {
+      ...orderData,
+      userId,
+      createdAt: serverTimestamp()
+    });
+    
+    // Also add to global orders collection for admin analytics
+    await addDoc(collection(db, 'orders'), {
+      ...orderData,
+      userId,
+      orderId: orderRef.id,
+      createdAt: serverTimestamp()
+    });
+    
+    // Update product statistics for analytics
+    await updateProductStatistics(orderData.items);
+    
+    return { id: orderRef.id, ...orderData };
+  } catch (error) {
+    console.error('Error creating order:', error);
+    throw error;
+  }
+};
+
+// Update product statistics for analytics
+const updateProductStatistics = async (orderItems) => {
+  try {
+    const batch = db.batch();
+    
+    // For each ordered product, update its statistics
+    for (const item of orderItems) {
+      const productRef = doc(db, 'products', item.productId);
+      const productStatsRef = doc(db, 'productStats', item.productId);
+      
+      // Update product's sales count
+      batch.update(productRef, {
+        salesCount: increment(item.quantity),
+        lastSold: serverTimestamp()
+      });
+      
+      // Update or create product stats document
+      const statsDoc = await getDoc(productStatsRef);
+      if (statsDoc.exists()) {
+        batch.update(productStatsRef, {
+          totalSales: increment(item.quantity),
+          totalRevenue: increment(item.price * item.quantity),
+          lastSold: serverTimestamp()
+        });
+      } else {
+        batch.set(productStatsRef, {
+          productId: item.productId,
+          productName: item.productName,
+          category: item.category,
+          totalSales: item.quantity,
+          totalRevenue: item.price * item.quantity,
+          firstSold: serverTimestamp(),
+          lastSold: serverTimestamp()
+        });
+      }
+      
+      // Update category statistics
+      const categoryRef = doc(db, 'categoryStats', item.category);
+      const categoryDoc = await getDoc(categoryRef);
+      
+      if (categoryDoc.exists()) {
+        batch.update(categoryRef, {
+          totalSales: increment(item.quantity),
+          totalRevenue: increment(item.price * item.quantity),
+          lastSold: serverTimestamp()
+        });
+      } else {
+        batch.set(categoryRef, {
+          category: item.category,
+          totalSales: item.quantity,
+          totalRevenue: item.price * item.quantity,
+          firstSold: serverTimestamp(),
+          lastSold: serverTimestamp()
+        });
+      }
+    }
+    
+    // Commit all the statistics updates
+    await batch.commit();
+  } catch (error) {
+    console.error('Error updating product statistics:', error);
+    // Don't throw here - we don't want order creation to fail if stats updates fail
+    // In a production app, you might want to log this to a monitoring service
+  }
+};
+
+// Get user orders
+export const getUserOrders = async (userId) => {
+  try {
+    const ordersRef = collection(db, 'users', userId, 'orders');
+    const q = query(ordersRef, orderBy('createdAt', 'desc'));
+    const querySnapshot = await getDocs(q);
+    
+    const orders = [];
+    querySnapshot.forEach((doc) => {
+      // Convert Firestore timestamp to JS Date
+      const data = doc.data();
+      const createdAt = data.createdAt?.toDate() || new Date();
+      
+      orders.push({
+        id: doc.id,
+        ...data,
+        createdAt
+      });
+    });
+    
+    return orders;
+  } catch (error) {
+    console.error('Error getting user orders:', error);
+    throw error;
+  }
+};
+
+// Get order analytics for admin dashboard
+export const getOrderAnalytics = async (timeFrame = 'month') => {
+  try {
+    // This would need to be implemented based on your specific analytics needs
+    // Here's a placeholder for the expected structure
+    return {
+      totalOrders: 0,
+      totalRevenue: 0,
+      averageOrderValue: 0,
+      productsSold: 0,
+      categorySales: {},
+      monthlySales: [],
+      topProducts: [],
+      recentOrders: []
+    };
+  } catch (error) {
+    console.error('Error getting order analytics:', error);
+    throw error;
+  }
+};
 /**
  * Get all products
  * @param {number} limitCount - Optional limit of products to retrieve
@@ -538,6 +763,195 @@ export const getUserProfile = async (userId) => {
  * @param {string} searchTerm - The search term to save
  * @returns {Promise<void>}
  */
+
+// Add these functions to your userService.js file
+
+// Get user's recent cart items
+export const getRecentCartItems = async (userId) => {
+  try {
+    const cartRef = collection(db, "users", userId, "cart");
+    const querySnapshot = await getDocs(query(cartRef, orderBy("addedAt", "desc"), limit(10)));
+    
+    const cartItems = [];
+    querySnapshot.forEach((doc) => {
+      cartItems.push({
+        id: doc.id,
+        productId: doc.data().productId,
+        addedAt: doc.data().addedAt,
+      });
+    });
+    
+    return cartItems;
+  } catch (error) {
+    console.error("Error getting cart items:", error);
+    throw error;
+  }
+};
+
+// Get user's wishlist items
+export const getWishlistItems = async (userId) => {
+  try {
+    const wishlistRef = collection(db, "users", userId, "wishlist");
+    const querySnapshot = await getDocs(query(wishlistRef, orderBy("addedAt", "desc")));
+    
+    const wishlistItems = [];
+    querySnapshot.forEach((doc) => {
+      wishlistItems.push({
+        id: doc.id,
+        productId: doc.data().productId,
+        addedAt: doc.data().addedAt,
+      });
+    });
+    
+    return wishlistItems;
+  } catch (error) {
+    console.error("Error getting wishlist items:", error);
+    throw error;
+  }
+};
+
+// Generate personalized recommendations based on user data
+export const generateRecommendations = async (userId, allProducts) => {
+  try {
+    // Skip if no user is logged in
+    if (!userId) return [];
+    
+    // Get user data
+    const searchHistory = await getSearchHistory(userId);
+    const cartItems = await getRecentCartItems(userId);
+    const wishlistItems = await getWishlistItems(userId);
+    
+    // Create a map to store product scores
+    const productScores = new Map();
+    
+    // Initialize scores for all products
+    allProducts.forEach(product => {
+      productScores.set(product.id, {
+        product,
+        score: 0,
+        matches: []
+      });
+    });
+    
+    // Extract keywords from search history
+    const searchTerms = searchHistory.map(item => item.term.toLowerCase());
+    
+    // Score products based on search history (most recent searches have more weight)
+    searchHistory.forEach((search, index) => {
+      const term = search.term.toLowerCase();
+      const recencyWeight = 1 - (index / (searchHistory.length || 1)) * 0.5; // 1.0 to 0.5 based on recency
+      
+      allProducts.forEach(product => {
+        let matched = false;
+        const productData = productScores.get(product.id);
+        
+        // Check if search term appears in product name or description
+        if (product.name.toLowerCase().includes(term)) {
+          productData.score += 3 * recencyWeight;
+          matched = true;
+        }
+        
+        if (product.description.toLowerCase().includes(term)) {
+          productData.score += 2 * recencyWeight;
+          matched = true;
+        }
+        
+        if (product.category.toLowerCase().includes(term)) {
+          productData.score += 3 * recencyWeight;
+          matched = true;
+        }
+        
+        if (matched) {
+          productData.matches.push(`search:${term}`);
+        }
+      });
+    });
+    
+    // Score products based on cart items
+    const cartProductIds = cartItems.map(item => item.productId);
+    cartProductIds.forEach(productId => {
+      // Find matching products with the same category
+      const cartProduct = allProducts.find(p => p.id === productId);
+      if (cartProduct) {
+        allProducts.forEach(product => {
+          if (product.id !== productId && product.category === cartProduct.category) {
+            const productData = productScores.get(product.id);
+            productData.score += 5;
+            productData.matches.push(`cart:${cartProduct.category}`);
+          }
+        });
+      }
+    });
+    
+    // Score products based on wishlist items
+    const wishlistProductIds = wishlistItems.map(item => item.productId);
+    wishlistProductIds.forEach(productId => {
+      // Find matching products with the same category
+      const wishlistProduct = allProducts.find(p => p.id === productId);
+      if (wishlistProduct) {
+        allProducts.forEach(product => {
+          if (product.id !== productId && product.category === wishlistProduct.category) {
+            const productData = productScores.get(product.id);
+            productData.score += 4;
+            productData.matches.push(`wishlist:${wishlistProduct.category}`);
+          }
+        });
+      }
+    });
+    
+    // Boost products that appear in both wishlist and search terms
+    searchTerms.forEach(term => {
+      wishlistProductIds.forEach(productId => {
+        const wishlistProduct = allProducts.find(p => p.id === productId);
+        if (wishlistProduct && 
+            (wishlistProduct.name.toLowerCase().includes(term) || 
+             wishlistProduct.description.toLowerCase().includes(term))) {
+          // Find similar products
+          allProducts.forEach(product => {
+            if (product.id !== productId && 
+                (product.name.toLowerCase().includes(term) || 
+                 product.description.toLowerCase().includes(term))) {
+              const productData = productScores.get(product.id);
+              productData.score += 3; // Extra boost for this overlap
+              productData.matches.push(`overlap:${term}`);
+            }
+          });
+        }
+      });
+    });
+    
+    // Convert Map to array, sort by score, and return top recommendations
+    const recommendations = Array.from(productScores.values())
+      .filter(item => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map(item => ({
+        ...item.product,
+        recommendationScore: item.score,
+        recommendationReason: item.matches
+      }));
+    
+    return recommendations;
+  } catch (error) {
+    console.error("Error generating recommendations:", error);
+    return [];
+  }
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
 export const saveSearchHistory = async (userId, searchTerm) => {
     if (!userId || !searchTerm || searchTerm.trim() === "") return;
     

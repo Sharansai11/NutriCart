@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { FaHeart, FaShoppingCart, FaSearch, FaFilter, FaStar, FaTimes } from "react-icons/fa";
+import { FaHeart, FaShoppingCart, FaSearch, FaFilter, FaStar, FaTimes, FaLightbulb } from "react-icons/fa";
 import { 
   addToCart, 
   addToWishlist, 
@@ -7,7 +7,10 @@ import {
   isInWishlist,
   saveSearchHistory,
   getSearchHistory,
-  deleteSearchTerm 
+  deleteSearchTerm,
+  getRecentCartItems,
+  getWishlistItems,
+  generateRecommendations
 } from "../api/userService";
 import { useAuth } from "../context/Authcontext";
 import { toast } from "react-toastify";
@@ -24,6 +27,9 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
   const [searchHistory, setSearchHistory] = useState([]);
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const searchInputRef = useRef(null);
+  const [recommendations, setRecommendations] = useState([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+  const [hasRecommendations, setHasRecommendations] = useState(false);
 
   // Get unique categories from products
   const categories = [...new Set(products.map((product) => product.category))];
@@ -75,6 +81,30 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
 
     fetchSearchHistory();
   }, [currentUser]);
+
+  // Get personalized recommendations
+  useEffect(() => {
+    const fetchRecommendations = async () => {
+      if (!currentUser || !products.length) {
+        setRecommendations([]);
+        setHasRecommendations(false);
+        return;
+      }
+      
+      setLoadingRecommendations(true);
+      try {
+        const userRecommendations = await generateRecommendations(currentUser.uid, products);
+        setRecommendations(userRecommendations);
+        setHasRecommendations(userRecommendations.length > 0);
+      } catch (error) {
+        console.error("Error fetching recommendations:", error);
+      } finally {
+        setLoadingRecommendations(false);
+      }
+    };
+
+    fetchRecommendations();
+  }, [currentUser, products]);
 
   // Handle search input focus
   const handleSearchInputFocus = () => {
@@ -156,6 +186,11 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
       
       await addToCart(currentUser.uid, product.id);
       toast.success(`${product.name} added to cart!`);
+      
+      // Refresh recommendations after adding to cart
+      const userRecommendations = await generateRecommendations(currentUser.uid, products);
+      setRecommendations(userRecommendations);
+      setHasRecommendations(userRecommendations.length > 0);
     } catch (error) {
       toast.error("Failed to add to cart: " + error.message);
     }
@@ -182,15 +217,21 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
         setWishlistItems([...wishlistItems, product.id]);
         toast.success(`${product.name} added to wishlist!`);
       }
+      
+      // Refresh recommendations after updating wishlist
+      const userRecommendations = await generateRecommendations(currentUser.uid, products);
+      setRecommendations(userRecommendations);
+      setHasRecommendations(userRecommendations.length > 0);
     } catch (error) {
       toast.error("Failed to update wishlist: " + error.message);
     }
   };
 
-  // Filter and sort products
-  const filteredProducts = products
-    .filter((product) => {
-      // Apply search term filter (using appliedSearchTerm instead of searchTerm)
+  // Filter and organize products
+  const organizeProducts = () => {
+    // First, filter all products based on current filters
+    const filteredProducts = products.filter((product) => {
+      // Apply search term filter
       if (
         appliedSearchTerm &&
         !product.name.toLowerCase().includes(appliedSearchTerm.toLowerCase()) &&
@@ -205,18 +246,85 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
       }
       
       return true;
-    })
-    .sort((a, b) => {
-      // Apply price sorting
-      if (priceSort === "low-to-high") {
-        return a.currentPrice - b.currentPrice;
-      } else if (priceSort === "high-to-low") {
-        return b.currentPrice - a.currentPrice;
-      }
-      
-      // Default: sort by newest
-      return new Date(b.createdAt) - new Date(a.createdAt);
     });
+
+    // For non-authenticated users or when no recommendations exist, just return filtered products
+    if (!currentUser || !hasRecommendations) {
+      return {
+        recommendedProducts: [],
+        otherProducts: filteredProducts.sort((a, b) => {
+          // Apply price sorting
+          if (priceSort === "low-to-high") {
+            return a.currentPrice - b.currentPrice;
+          } else if (priceSort === "high-to-low") {
+            return b.currentPrice - a.currentPrice;
+          }
+          
+          // Default: sort by newest
+          return new Date(b.createdAt) - new Date(a.createdAt);
+        })
+      };
+    }
+
+    // Get recommended products that pass the filter
+    const recommendedProductIds = new Set(recommendations.map(rec => rec.id));
+    const recommendedProducts = filteredProducts
+      .filter(product => recommendedProductIds.has(product.id))
+      .map(product => {
+        // Find matching recommendation to get score and reason
+        const recommendation = recommendations.find(rec => rec.id === product.id);
+        return {
+          ...product,
+          recommendationScore: recommendation ? recommendation.recommendationScore : 0,
+          recommendationReason: recommendation ? recommendation.recommendationReason : []
+        };
+      })
+      .sort((a, b) => b.recommendationScore - a.recommendationScore);
+    
+    // Get other products (non-recommended)
+    const otherProducts = filteredProducts
+      .filter(product => !recommendedProductIds.has(product.id))
+      .sort((a, b) => {
+        // Apply price sorting
+        if (priceSort === "low-to-high") {
+          return a.currentPrice - b.currentPrice;
+        } else if (priceSort === "high-to-low") {
+          return b.currentPrice - a.currentPrice;
+        }
+        
+        // Default: sort by newest
+        return new Date(b.createdAt) - new Date(a.createdAt);
+      });
+    
+    return { recommendedProducts, otherProducts };
+  };
+
+  // Get the organized products
+  const { recommendedProducts, otherProducts } = organizeProducts();
+
+  // Format recommendation reason
+  const formatRecommendationReason = (reasons) => {
+    if (!reasons || reasons.length === 0) return "";
+
+    const reasonsMap = {
+      "search:": "Based on your searches for",
+      "cart:": "Similar to items in your cart",
+      "wishlist:": "Similar to items in your wishlist",
+      "overlap:": "Matches multiple interests"
+    };
+
+    // Get the first reason for display
+    const firstReason = reasons[0];
+    
+    for (const [prefix, text] of Object.entries(reasonsMap)) {
+      if (firstReason.startsWith(prefix)) {
+        const value = firstReason.substring(prefix.length);
+        return value ? `${text} "${value}"` : text;
+      }
+    }
+    
+    return "Recommended for you";
+  };
 
   // Format currency
   const formatCurrency = (price) => {
@@ -226,6 +334,136 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
       maximumFractionDigits: 0,
     }).format(price);
   };
+
+  // Render product card
+  const renderProductCard = (product) => {
+    // Check if product has discount
+    const hasDiscount = product.basePrice > product.currentPrice;
+    const discountPercentage = hasDiscount 
+      ? Math.round(((product.basePrice - product.currentPrice) / product.basePrice) * 100) 
+      : 0;
+    
+    // Check if product is in wishlist
+    const isInUserWishlist = wishlistItems.includes(product.id);
+    
+    // Format recommendation reason if available
+    const recommendationReason = product.recommendationReason 
+      ? formatRecommendationReason(product.recommendationReason)
+      : "";
+    
+    // Check if this is a recommended product
+    const isRecommended = product.recommendationScore > 0;
+    
+    return (
+      <div key={product.id} className="col">
+        <div className={`card h-100 shadow-sm border-0 rounded-3 overflow-hidden ${isRecommended ? 'border border-primary' : ''}`}>
+          {/* Product badges */}
+          <div className="position-absolute d-flex justify-content-between w-100 px-3 pt-3 z-1">
+            <div>
+              {product.isNewArrival && (
+                <span className="badge bg-dark rounded-pill px-3 py-2 me-2">
+                  NEW ARRIVAL
+                </span>
+              )}
+              {isRecommended && (
+                <span className="badge bg-primary rounded-pill px-3 py-2">
+                  <FaLightbulb className="me-1" /> FOR YOU
+                </span>
+              )}
+            </div>
+            {hasDiscount && (
+              <span className="badge bg-danger rounded-pill ms-auto px-3 py-2">
+                −{discountPercentage}%
+              </span>
+            )}
+          </div>
+          
+          {/* Product image */}
+          <div style={{ height: "280px", backgroundColor: "#f8f9fa" }}>
+            <img
+              src={product.imageUrl || "https://placehold.co/400x400?text=No+Image"}
+              className="w-100 h-100"
+              alt={product.name}
+              style={{ objectFit: "contain" }}
+            />
+          </div>
+          
+          {/* Product details */}
+          <div className="card-body d-flex flex-column">
+            <div className="mb-2">
+              <span className="badge bg-secondary rounded-pill">{product.category}</span>
+              {product.demandScore > 0 && (
+                <span className="ms-2">
+                  <FaStar className="text-warning me-1" />
+                  <small>{product.demandScore}/10</small>
+                </span>
+              )}
+            </div>
+            
+            <h5 className="card-title fw-bold mb-1">{product.name}</h5>
+            
+            {/* Recommendation reason if available */}
+            {recommendationReason && (
+              <div className="mb-2">
+                <small className="text-primary d-flex align-items-center">
+                  <FaLightbulb className="me-1" />
+                  {recommendationReason}
+                </small>
+              </div>
+            )}
+            
+            <p className="card-text small text-muted mb-3">
+              {product.description.length > 60
+                ? product.description.substring(0, 60) + "..."
+                : product.description}
+            </p>
+            
+            <div className="mt-auto">
+              <div className="d-flex align-items-center justify-content-between mb-3">
+                <div>
+                  <h4 className="fw-bold mb-0">{formatCurrency(product.currentPrice)}</h4>
+                  {hasDiscount && (
+                    <div>
+                      <span className="text-decoration-line-through text-muted">
+                        {formatCurrency(product.basePrice)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  {product.stock > 0 ? (
+                    <span className="badge bg-success px-3 py-2">IN STOCK</span>
+                  ) : (
+                    <span className="badge bg-danger px-3 py-2">OUT OF STOCK</span>
+                  )}
+                </div>
+              </div>
+              
+              {/* Action buttons */}
+              <div className="d-flex gap-2">
+                <button
+                  className="btn btn-dark flex-grow-1 d-flex align-items-center justify-content-center"
+                  onClick={() => handleAddToCart(product)}
+                  disabled={product.stock <= 0}
+                >
+                  <FaShoppingCart className="me-2" />
+                  Add to Cart
+                </button>
+                <button
+                  className={`btn ${isInUserWishlist ? 'btn-danger' : 'btn-outline-danger'}`}
+                  onClick={() => handleToggleWishlist(product)}
+                  title={isInUserWishlist ? "Remove from wishlist" : "Add to wishlist"}
+                >
+                  <FaHeart />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="product-catalog">
       {error && <div className="alert alert-danger">{error}</div>}
@@ -396,7 +634,7 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
       </div>
 
       {/* Loading indicator */}
-      {(loading || checkingWishlist) && (
+      {(loading || checkingWishlist || loadingRecommendations) && (
         <div className="text-center py-5">
           <div className="spinner-border text-dark" role="status">
             <span className="visually-hidden">Loading...</span>
@@ -406,7 +644,8 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
       )}
 
       {/* No products found */}
-      {!loading && !checkingWishlist && filteredProducts.length === 0 && (
+      {!loading && !checkingWishlist && !loadingRecommendations && 
+       recommendedProducts.length === 0 && otherProducts.length === 0 && (
         <div className="text-center py-5">
           <div className="mb-3">
             <img
@@ -427,112 +666,41 @@ const ViewProducts = ({ products = [], loading = false, error = "" }) => {
         </div>
       )}
 
-      {/* Products grid */}
-      {!loading && !checkingWishlist && (
-        <div className="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
-          {filteredProducts.map((product) => {
-            // Check if product has discount
-            const hasDiscount = product.basePrice > product.currentPrice;
-            const discountPercentage = hasDiscount 
-              ? Math.round(((product.basePrice - product.currentPrice) / product.basePrice) * 100) 
-              : 0;
-            
-            // Check if product is in wishlist
-            const isInUserWishlist = wishlistItems.includes(product.id);
-            
-            return (
-              <div key={product.id} className="col">
-                <div className="card h-100 shadow-sm border-0 rounded-3 overflow-hidden">
-                  {/* Product badges */}
-                  <div className="position-absolute d-flex justify-content-between w-100 px-3 pt-3 z-1">
-                    {product.isNewArrival && (
-                      <span className="badge bg-dark rounded-pill px-3 py-2">
-                        NEW ARRIVAL
-                      </span>
-                    )}
-                    {hasDiscount && (
-                      <span className="badge bg-danger rounded-pill ms-auto px-3 py-2">
-                        −{discountPercentage}%
-                      </span>
-                    )}
-                  </div>
-                  
-                  {/* Product image */}
-                  <div style={{ height: "280px", backgroundColor: "#f8f9fa" }}>
-                    <img
-                      src={product.imageUrl || "https://placehold.co/400x400?text=No+Image"}
-                      className="w-100 h-100"
-                      alt={product.name}
-                      style={{ objectFit: "contain" }}
-                    />
-                  </div>
-                  
-                  {/* Product details */}
-                  <div className="card-body d-flex flex-column">
-                    <div className="mb-2">
-                      <span className="badge bg-secondary rounded-pill">{product.category}</span>
-                      {product.demandScore > 0 && (
-                        <span className="ms-2">
-                          <FaStar className="text-warning me-1" />
-                          <small>{product.demandScore}/10</small>
-                        </span>
-                      )}
-                    </div>
-                    
-                    <h5 className="card-title fw-bold mb-1">{product.name}</h5>
-                    
-                    <p className="card-text small text-muted mb-3">
-                      {product.description.length > 60
-                        ? product.description.substring(0, 60) + "..."
-                        : product.description}
-                    </p>
-                    
-                    <div className="mt-auto">
-                      <div className="d-flex align-items-center justify-content-between mb-3">
-                        <div>
-                          <h4 className="fw-bold mb-0">{formatCurrency(product.currentPrice)}</h4>
-                          {hasDiscount && (
-                            <div>
-                              <span className="text-decoration-line-through text-muted">
-                                {formatCurrency(product.basePrice)}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                        <div>
-                          {product.stock > 0 ? (
-                            <span className="badge bg-success px-3 py-2">IN STOCK</span>
-                          ) : (
-                            <span className="badge bg-danger px-3 py-2">OUT OF STOCK</span>
-                          )}
-                        </div>
-                      </div>
-                      
-                      {/* Action buttons */}
-                      <div className="d-flex gap-2">
-                        <button
-                          className="btn btn-dark flex-grow-1 d-flex align-items-center justify-content-center"
-                          onClick={() => handleAddToCart(product)}
-                          disabled={product.stock <= 0}
-                        >
-                          <FaShoppingCart className="me-2" />
-                          Add to Cart
-                        </button>
-                        <button
-                          className={`btn ${isInUserWishlist ? 'btn-danger' : 'btn-outline-danger'}`}
-                          onClick={() => handleToggleWishlist(product)}
-                          title={isInUserWishlist ? "Remove from wishlist" : "Add to wishlist"}
-                        >
-                          <FaHeart />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+      {/* Products grid with recommendations at top */}
+      {!loading && !checkingWishlist && !loadingRecommendations && (
+        <>
+          {/* Recommended products section (if any) */}
+          {recommendedProducts.length > 0 && (
+            <>
+              <div className="mb-4 mt-4">
+                <div className="d-flex align-items-center">
+                  <FaLightbulb className="text-primary me-2" />
+                  <h4 className="mb-0">Recommended For You</h4>
                 </div>
+                <p className="text-muted mt-2">
+                  Products personalized to your interests
+                </p>
               </div>
-            );
-          })}
-        </div>
+              <div className="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4 mb-5">
+                {recommendedProducts.map(product => renderProductCard(product))}
+              </div>
+            </>
+          )}
+          
+          {/* All other products */}
+          {otherProducts.length > 0 && (
+            <>
+              {recommendedProducts.length > 0 && (
+                <div className="mb-4">
+                  <h4 className="mb-0">All Products</h4>
+                </div>
+              )}
+              <div className="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-4">
+                {otherProducts.map(product => renderProductCard(product))}
+              </div>
+            </>
+          )}
+        </>
       )}
     </div>
   );

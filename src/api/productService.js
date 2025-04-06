@@ -478,6 +478,58 @@ export const getProductById = async (productId) => {
  * @param {Object} productData - The updated product data
  * @returns {Promise<void>}
  */
+
+
+
+// Add this function to your productService.js file
+
+// Get products by IDs (useful for recommendations)
+export const getProductsByIds = async (productIds) => {
+  try {
+    if (!productIds || productIds.length === 0) {
+      return [];
+    }
+    
+    const productsRef = collection(db, "products");
+    const chunks = [];
+    
+    // Firebase only allows 10 items in 'in' query, so chunk if needed
+    for (let i = 0; i < productIds.length; i += 10) {
+      const chunk = productIds.slice(i, i + 10);
+      chunks.push(chunk);
+    }
+    
+    const results = await Promise.all(
+      chunks.map(async (chunk) => {
+        const q = query(productsRef, where("id", "in", chunk));
+        const querySnapshot = await getDocs(q);
+        
+        const products = [];
+        querySnapshot.forEach((doc) => {
+          products.push({
+            id: doc.id,
+            ...doc.data()
+          });
+        });
+        
+        return products;
+      })
+    );
+    
+    // Flatten results
+    return results.flat();
+  } catch (error) {
+    console.error("Error getting products by IDs:", error);
+    throw error;
+  }
+};
+
+
+
+
+
+
+
 export const updateProduct = async (productId, productData) => {
   try {
     const productRef = doc(db, "products", productId);
