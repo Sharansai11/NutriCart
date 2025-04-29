@@ -17,6 +17,7 @@ import MyOrders from "./Components/MyOrders";
 import ViewProducts from "./Components/ViewProducts";
 import ViewProduct from "./Components/ViewProduct"; // Import new component
 import EditProduct from "./Components/EditProduct"; // Import new component
+import ViewOrders from "./Components/ViewOrders";
 
 function App() {
   return (
@@ -50,7 +51,9 @@ function App() {
             <Route path="/view-product/:id" element={<ViewProduct />} />
 <Route path="/edit-product/:id" element={<EditProduct />} />
             {/* Admin route */}
-            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin" element={<Myproducts/>} />
+
+            <Route path="/admin/orders" element={<ViewOrders />} />
           </Routes>
         </div>
       </AuthProvider>

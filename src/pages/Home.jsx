@@ -129,7 +129,7 @@ const heroStyle = {
 position: "relative",
 height: "600px",
 backgroundImage:
-'url("https://images.unsplash.com/photo-1607082349566-187342175e2f?ixlib=rb-1.2.1&auto=format&fit=crop&w=2000&q=80")',
+'url("https://thumbs.dreamstime.com/b/good-food-health-life-sticky-notes-lifestyle-motivational-reminder-317168664.jpg")',
 backgroundSize: "cover",
 backgroundPosition: "center",
 };
@@ -228,7 +228,7 @@ Discover Amazing Deals
 Shop the latest trends with unbeatable prices. Limited time offers available now!
 </p>
 <Link
-to="/products"
+to="/login"
 style={{
 backgroundColor: "#4F46E5",
 color: "white",
@@ -249,7 +249,7 @@ Shop Now
 <div style={{ padding: "64px 0" }}>
 <div style={{ ...containerStyle, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }}>
 <h2 style={sectionTitleStyle}>Shop by Category</h2>
-<Link to="/categories" style={linkStyle}>
+<Link to="/login" style={linkStyle}>
 View All <ChevronRight size={20} style={{ marginLeft: "4px" }} />
 </Link>
 </div>
@@ -263,7 +263,7 @@ View All <ChevronRight size={20} style={{ marginLeft: "4px" }} />
 <div style={{ padding: "64px 0", backgroundColor: "#f9f9f9" }}>
 <div style={{ ...containerStyle, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }}>
 <h2 style={sectionTitleStyle}>Featured Products</h2>
-<Link to="/products" style={linkStyle}>
+<Link to="/login" style={linkStyle}>
 View All <ChevronRight size={20} style={{ marginLeft: "4px" }} />
 </Link>
 </div>

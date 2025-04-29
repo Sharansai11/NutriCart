@@ -1,548 +1,243 @@
-// src/api/userService.js
-import { db } from "./firebaseConfig";
+import { db, auth } from "./firebaseConfig";
 import {
   collection,
-  getDocs,
-  getDoc,
-  setDoc,
   doc,
-  addDoc,
+  getDoc,
+  getDocs,
+  setDoc,
   updateDoc,
   deleteDoc,
   query,
   where,
-  orderBy,
-  limit,
-  serverTimestamp,
   arrayUnion,
   arrayRemove,
+  serverTimestamp,
+  limit,
+  orderBy,
+  runTransaction,
+  Timestamp,
   increment
 } from "firebase/firestore";
+import {
+  updateProfile,
+  updateEmail,
+  updatePassword
+} from 'firebase/auth';
 
-
-// Get all items in the user's cart with product details
-export const getCartItems = async (userId) => {
-  try {
-    const cartRef = collection(db, 'users', userId, 'cart');
-    const querySnapshot = await getDocs(cartRef);
-    
-    const cartItems = [];
-    const productPromises = [];
-    
-    // Rename the parameter to avoid conflict with the Firestore 'doc' function
-    querySnapshot.forEach((cartDoc) => {
-      const item = {
-        id: cartDoc.id,
-        productId: cartDoc.data().productId,
-        quantity: cartDoc.data().quantity,
-        addedAt: cartDoc.data().addedAt
-      };
-      
-      cartItems.push(item);
-      
-      // Use the Firestore 'doc' function correctly now
-      const productPromise = getDoc(doc(db, 'products', item.productId))
-        .then(productDoc => {
-          if (productDoc.exists()) {
-            return { id: productDoc.id, ...productDoc.data() };
-          }
-          return null;
-        });
-      
-      productPromises.push(productPromise);
-    });
-    
-    const products = await Promise.all(productPromises);
-    
-    return cartItems.map((item, index) => ({
-      ...item,
-      product: products[index] || { 
-        id: item.productId, 
-        name: 'Product not found', 
-        currentPrice: 0,
-        imageUrl: null
-      }
-    }));
-  } catch (error) {
-    console.error('Error getting cart items:', error);
-    throw error;
-  }
-};
-
-// Update quantity of an item in the cart
-export const updateCartItemQuantity = async (userId, cartItemId, quantity) => {
-  try {
-    const cartItemRef = doc(db, 'users', userId, 'cart', cartItemId);
-    await updateDoc(cartItemRef, {
-      quantity: quantity
-    });
-  } catch (error) {
-    console.error('Error updating cart item quantity:', error);
-    throw error;
-  }
-};
-
-
-
-// Clear the entire cart
-export const clearCart = async (userId) => {
-  try {
-    const cartRef = collection(db, 'users', userId, 'cart');
-    const querySnapshot = await getDocs(cartRef);
-    
-    const deletePromises = [];
-    querySnapshot.forEach((doc) => {
-      deletePromises.push(deleteDoc(doc.ref));
-    });
-    
-    await Promise.all(deletePromises);
-  } catch (error) {
-    console.error('Error clearing cart:', error);
-    throw error;
-  }
-};
-
-// Create a new order
-export const createOrder = async (userId, orderData) => {
-  try {
-    // Add order to user's orders collection
-    const ordersRef = collection(db, 'users', userId, 'orders');
-    const orderRef = await addDoc(ordersRef, {
-      ...orderData,
-      userId,
-      createdAt: serverTimestamp()
-    });
-    
-    // Also add to global orders collection for admin analytics
-    await addDoc(collection(db, 'orders'), {
-      ...orderData,
-      userId,
-      orderId: orderRef.id,
-      createdAt: serverTimestamp()
-    });
-    
-    // Update product statistics for analytics
-    await updateProductStatistics(orderData.items);
-    
-    return { id: orderRef.id, ...orderData };
-  } catch (error) {
-    console.error('Error creating order:', error);
-    throw error;
-  }
-};
-
-// Update product statistics for analytics
-const updateProductStatistics = async (orderItems) => {
-  try {
-    const batch = db.batch();
-    
-    // For each ordered product, update its statistics
-    for (const item of orderItems) {
-      const productRef = doc(db, 'products', item.productId);
-      const productStatsRef = doc(db, 'productStats', item.productId);
-      
-      // Update product's sales count
-      batch.update(productRef, {
-        salesCount: increment(item.quantity),
-        lastSold: serverTimestamp()
-      });
-      
-      // Update or create product stats document
-      const statsDoc = await getDoc(productStatsRef);
-      if (statsDoc.exists()) {
-        batch.update(productStatsRef, {
-          totalSales: increment(item.quantity),
-          totalRevenue: increment(item.price * item.quantity),
-          lastSold: serverTimestamp()
-        });
-      } else {
-        batch.set(productStatsRef, {
-          productId: item.productId,
-          productName: item.productName,
-          category: item.category,
-          totalSales: item.quantity,
-          totalRevenue: item.price * item.quantity,
-          firstSold: serverTimestamp(),
-          lastSold: serverTimestamp()
-        });
-      }
-      
-      // Update category statistics
-      const categoryRef = doc(db, 'categoryStats', item.category);
-      const categoryDoc = await getDoc(categoryRef);
-      
-      if (categoryDoc.exists()) {
-        batch.update(categoryRef, {
-          totalSales: increment(item.quantity),
-          totalRevenue: increment(item.price * item.quantity),
-          lastSold: serverTimestamp()
-        });
-      } else {
-        batch.set(categoryRef, {
-          category: item.category,
-          totalSales: item.quantity,
-          totalRevenue: item.price * item.quantity,
-          firstSold: serverTimestamp(),
-          lastSold: serverTimestamp()
-        });
-      }
-    }
-    
-    // Commit all the statistics updates
-    await batch.commit();
-  } catch (error) {
-    console.error('Error updating product statistics:', error);
-    // Don't throw here - we don't want order creation to fail if stats updates fail
-    // In a production app, you might want to log this to a monitoring service
-  }
-};
-
-// Get user orders
-export const getUserOrders = async (userId) => {
-  try {
-    const ordersRef = collection(db, 'users', userId, 'orders');
-    const q = query(ordersRef, orderBy('createdAt', 'desc'));
-    const querySnapshot = await getDocs(q);
-    
-    const orders = [];
-    querySnapshot.forEach((doc) => {
-      // Convert Firestore timestamp to JS Date
-      const data = doc.data();
-      const createdAt = data.createdAt?.toDate() || new Date();
-      
-      orders.push({
-        id: doc.id,
-        ...data,
-        createdAt
-      });
-    });
-    
-    return orders;
-  } catch (error) {
-    console.error('Error getting user orders:', error);
-    throw error;
-  }
-};
-
-// Get order analytics for admin dashboard
-export const getOrderAnalytics = async (timeFrame = 'month') => {
-  try {
-    // This would need to be implemented based on your specific analytics needs
-    // Here's a placeholder for the expected structure
-    return {
-      totalOrders: 0,
-      totalRevenue: 0,
-      averageOrderValue: 0,
-      productsSold: 0,
-      categorySales: {},
-      monthlySales: [],
-      topProducts: [],
-      recentOrders: []
-    };
-  } catch (error) {
-    console.error('Error getting order analytics:', error);
-    throw error;
-  }
-};
-/**
- * Get all products
- * @param {number} limitCount - Optional limit of products to retrieve
- * @returns {Promise<Array>} - Array of products
- */
-export const getProducts = async (limitCount = 50) => {
-  try {
-    const q = query(
-      collection(db, "products"),
-      orderBy("createdAt", "desc"),
-      limit(limitCount)
-    );
-    
-    const querySnapshot = await getDocs(q);
-    const products = [];
-    
-    querySnapshot.forEach((doc) => {
-      products.push({
-        id: doc.id,
-        ...doc.data(),
-        // Convert Firestore timestamps to dates for easier handling
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-        updatedAt: doc.data().updatedAt?.toDate() || new Date(),
-      });
-    });
-    
-    return products;
-  } catch (error) {
-    console.error("Error getting products:", error);
-    throw error;
-  }
-};
+// ----- User Profile Operations -----
 
 /**
- * Get a single product by ID
- * @param {string} productId - The product ID
- * @returns {Promise<Object>} - The product data
+ * Get a user's profile from Firestore
+ * @param {string} userId 
+ * @returns {Promise<Object>} User data
  */
-export const getProductById = async (productId) => {
+export const getUserProfile = async (userId) => {
+  if (!userId) throw new Error("User ID is required");
+  
   try {
-    const docRef = doc(db, "products", productId);
-    const docSnap = await getDoc(docRef);
-    
-    if (docSnap.exists()) {
-      // Increment view count
-      await updateDoc(docRef, {
-        viewCount: increment(1)
-      });
-      
-      return {
-        id: docSnap.id,
-        ...docSnap.data(),
-        createdAt: docSnap.data().createdAt?.toDate() || new Date(),
-        updatedAt: docSnap.data().updatedAt?.toDate() || new Date(),
-      };
+    const userDoc = await getDoc(doc(db, "users", userId));
+    if (userDoc.exists()) {
+      return userDoc.data();
     } else {
-      throw new Error("Product not found");
+      throw new Error("User not found");
     }
   } catch (error) {
-    console.error("Error getting product:", error);
+    console.error("Error fetching user profile:", error);
     throw error;
   }
 };
 
 /**
- * Add product to wishlist
- * @param {string} userId - The user ID
- * @param {string} productId - The product ID
+ * Update a user's profile in Firestore
+ * @param {string} userId 
+ * @param {Object} profileData 
  * @returns {Promise<void>}
  */
-export const addToWishlist = async (userId, productId) => {
+export const updateUserProfile = async (userId, profileData) => {
+  if (!userId) throw new Error("User ID is required");
+  
   try {
-    // Get product details
-    const product = await getProductById(productId);
+    const userRef = doc(db, "users", userId);
     
-    if (!product) {
+    // Update Firestore document
+    await updateDoc(userRef, {
+      ...profileData,
+      updatedAt: serverTimestamp()
+    });
+    
+    // Update display name in Firebase Auth if provided
+    if (profileData.displayName && auth.currentUser) {
+      await updateProfile(auth.currentUser, {
+        displayName: profileData.displayName
+      });
+    }
+    
+    return true;
+  } catch (error) {
+    console.error("Error updating user profile:", error);
+    throw error;
+  }
+};
+
+/**
+ * Update user's email in Firebase Auth
+ * @param {string} newEmail 
+ * @returns {Promise<void>}
+ */
+export const updateUserEmail = async (newEmail) => {
+  if (!auth.currentUser) throw new Error("User not authenticated");
+  
+  try {
+    await updateEmail(auth.currentUser, newEmail);
+    
+    // Also update email in Firestore
+    await updateDoc(doc(db, "users", auth.currentUser.uid), {
+      email: newEmail,
+      updatedAt: serverTimestamp()
+    });
+    
+    return true;
+  } catch (error) {
+    console.error("Error updating email:", error);
+    throw error;
+  }
+};
+
+/**
+ * Update user's password in Firebase Auth
+ * @param {string} newPassword 
+ * @returns {Promise<void>}
+ */
+export const updateUserPassword = async (newPassword) => {
+  if (!auth.currentUser) throw new Error("User not authenticated");
+  
+  try {
+    await updatePassword(auth.currentUser, newPassword);
+    return true;
+  } catch (error) {
+    console.error("Error updating password:", error);
+    throw error;
+  }
+};
+
+// ----- Cart Operations -----
+
+/**
+ * Get user's cart items
+ * @param {string} userId 
+ * @returns {Promise<Array>} Array of cart items with product data
+ */
+export const getCartItems = async (userId) => {
+  if (!userId) throw new Error("User ID is required");
+  
+  try {
+    // Get cart document
+    const cartDoc = await getDoc(doc(db, "carts", userId));
+    
+    if (!cartDoc.exists()) {
+      return []; // Return empty array if cart doesn't exist
+    }
+    
+    const cartData = cartDoc.data();
+    const items = cartData.items || [];
+    
+    // Fetch product details for each cart item
+    const cartItemsWithProducts = await Promise.all(
+      items.map(async (item) => {
+        const productDoc = await getDoc(doc(db, "products", item.productId));
+        if (productDoc.exists()) {
+          const productData = productDoc.data();
+          return {
+            ...item,
+            product: {
+              id: item.productId,
+              ...productData
+            }
+          };
+        }
+        return item;
+      })
+    );
+    
+    return cartItemsWithProducts;
+  } catch (error) {
+    console.error("Error getting cart items:", error);
+    throw error;
+  }
+};
+
+/**
+ * Add a product to user's cart
+ * @param {string} userId 
+ * @param {string} productId 
+ * @param {number} quantity 
+ * @returns {Promise<void>}
+ */
+export const addToCart = async (userId, productId, quantity = 1) => {
+  if (!userId) throw new Error("User ID is required");
+  if (!productId) throw new Error("Product ID is required");
+  
+  try {
+    const cartRef = doc(db, "carts", userId);
+    const cartDoc = await getDoc(cartRef);
+    
+    // Check product stock before adding
+    const productDoc = await getDoc(doc(db, "products", productId));
+    if (!productDoc.exists()) {
       throw new Error("Product not found");
     }
     
-    // Check if wishlist exists
-    const wishlistRef = doc(db, "wishlists", userId);
-    const wishlistSnap = await getDoc(wishlistRef);
+    const productData = productDoc.data();
+    if (productData.stock <= 0) {
+      throw new Error("Product is out of stock");
+    }
     
-    if (wishlistSnap.exists()) {
-      // Wishlist exists, check if item is already in wishlist
-      const wishlistData = wishlistSnap.data();
-      const existingItem = wishlistData.items.find(item => item.productId === productId);
+    if (cartDoc.exists()) {
+      // Cart exists, check if product is already in cart
+      const cartData = cartDoc.data();
+      const items = cartData.items || [];
+      const existingItemIndex = items.findIndex(item => item.productId === productId);
       
-      if (existingItem) {
-        // Item already in wishlist, no need to add again
-        return;
-      } else {
-        // Add new item to wishlist
-        const newItem = {
-          productId: productId,
-          name: product.name,
-          imageUrl: product.imageUrl,
-          price: product.currentPrice,
-          addedAt: new Date().toISOString()
-        };
+      if (existingItemIndex >= 0) {
+        // Product already in cart, update quantity
+        const updatedItems = [...items];
+        updatedItems[existingItemIndex].quantity += quantity;
         
-        await updateDoc(wishlistRef, {
-          items: arrayUnion(newItem),
+        // Check against available stock
+        if (updatedItems[existingItemIndex].quantity > productData.stock) {
+          updatedItems[existingItemIndex].quantity = productData.stock;
+        }
+        
+        await updateDoc(cartRef, {
+          items: updatedItems,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        // Product not in cart, add new item
+        await updateDoc(cartRef, {
+          items: arrayUnion({
+            productId,
+            quantity: quantity,
+            addedAt: Timestamp.now()
+          }),
           updatedAt: serverTimestamp()
         });
       }
     } else {
-      // Create new wishlist
-      const newItem = {
-        productId: productId,
-        name: product.name,
-        imageUrl: product.imageUrl,
-        price: product.currentPrice,
-        addedAt: new Date().toISOString()
-      };
-      
-      await setDoc(wishlistRef, {
-        userId: userId,
-        items: [newItem],
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      });
-    }
-  } catch (error) {
-    console.error("Error adding to wishlist:", error);
-    throw error;
-  }
-};
-
-/**
- * Get user's wishlist
- * @param {string} userId - The user ID
- * @returns {Promise<Object>} - The wishlist data
- */
-export const getWishlist = async (userId) => {
-  try {
-    const wishlistRef = doc(db, "wishlists", userId);
-    const wishlistSnap = await getDoc(wishlistRef);
-    
-    if (wishlistSnap.exists()) {
-      return {
-        id: wishlistSnap.id,
-        ...wishlistSnap.data(),
-        createdAt: wishlistSnap.data().createdAt?.toDate() || new Date(),
-        updatedAt: wishlistSnap.data().updatedAt?.toDate() || new Date(),
-      };
-    } else {
-      // Return empty wishlist if not exists
-      return {
-        userId: userId,
-        items: []
-      };
-    }
-  } catch (error) {
-    console.error("Error getting wishlist:", error);
-    throw error;
-  }
-};
-
-/**
- * Remove item from wishlist
- * @param {string} userId - The user ID
- * @param {string} productId - The product ID to remove
- * @returns {Promise<void>}
- */
-export const removeFromWishlist = async (userId, productId) => {
-  try {
-    const wishlistRef = doc(db, "wishlists", userId);
-    const wishlistSnap = await getDoc(wishlistRef);
-    
-    if (wishlistSnap.exists()) {
-      const wishlistData = wishlistSnap.data();
-      const itemToRemove = wishlistData.items.find(item => item.productId === productId);
-      
-      if (!itemToRemove) {
-        throw new Error("Item not found in wishlist");
-      }
-      
-      const updatedItems = wishlistData.items.filter(item => item.productId !== productId);
-      
-      await updateDoc(wishlistRef, {
-        items: updatedItems,
-        updatedAt: serverTimestamp()
-      });
-    }
-  } catch (error) {
-    console.error("Error removing from wishlist:", error);
-    throw error;
-  }
-};
-
-/**
- * Check if a product is in user's wishlist
- * @param {string} userId - The user ID
- * @param {string} productId - The product ID
- * @returns {Promise<boolean>} - True if product is in wishlist
- */
-export const isInWishlist = async (userId, productId) => {
-  try {
-    const wishlistRef = doc(db, "wishlists", userId);
-    const wishlistSnap = await getDoc(wishlistRef);
-    
-    if (wishlistSnap.exists()) {
-      const wishlistData = wishlistSnap.data();
-      return wishlistData.items.some(item => item.productId === productId);
-    }
-    
-    return false;
-  } catch (error) {
-    console.error("Error checking wishlist:", error);
-    return false;
-  }
-};
-
-/**
- * Add product to cart
- * @param {string} userId - The user ID
- * @param {string} productId - The product ID
- * @param {number} quantity - The quantity to add (default: 1)
- * @returns {Promise<void>}
- */
-export const addToCart = async (userId, productId, quantity = 1) => {
-  try {
-    // Get product details
-    const product = await getProductById(productId);
-    
-    if (!product) {
-      throw new Error("Product not found");
-    }
-    
-    if (product.stock < quantity) {
-      throw new Error("Not enough stock available");
-    }
-    
-    // Check if cart exists
-    const cartRef = doc(db, "carts", userId);
-    const cartSnap = await getDoc(cartRef);
-    
-    if (cartSnap.exists()) {
-      // Cart exists, check if item is already in cart
-      const cartData = cartSnap.data();
-      const existingItem = cartData.items.find(item => item.productId === productId);
-      
-      if (existingItem) {
-        // Update quantity of existing item
-        const updatedItems = cartData.items.map(item => {
-          if (item.productId === productId) {
-            return {
-              ...item,
-              quantity: item.quantity + quantity,
-              totalPrice: (item.quantity + quantity) * product.currentPrice
-            };
-          }
-          return item;
-        });
-        
-        await updateDoc(cartRef, {
-          items: updatedItems,
-          updatedAt: serverTimestamp(),
-          totalAmount: updatedItems.reduce((sum, item) => sum + item.totalPrice, 0)
-        });
-      } else {
-        // Add new item to cart
-        const newItem = {
-          productId: productId,
-          name: product.name,
-          imageUrl: product.imageUrl,
-          price: product.currentPrice,
-          quantity: quantity,
-          totalPrice: product.currentPrice * quantity,
-          addedAt: new Date().toISOString()
-        };
-        
-        await updateDoc(cartRef, {
-          items: arrayUnion(newItem),
-          updatedAt: serverTimestamp(),
-          totalAmount: cartData.totalAmount + newItem.totalPrice
-        });
-      }
-    } else {
       // Create new cart
-      const newItem = {
-        productId: productId,
-        name: product.name,
-        imageUrl: product.imageUrl,
-        price: product.currentPrice,
-        quantity: quantity,
-        totalPrice: product.currentPrice * quantity,
-        addedAt: new Date().toISOString()
-      };
-      
       await setDoc(cartRef, {
-        userId: userId,
-        items: [newItem],
-        totalAmount: newItem.totalPrice,
+        userId,
+        items: [{
+          productId,
+          quantity: quantity,
+          addedAt: Timestamp.now()
+        }],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
     }
+    
+    return true;
   } catch (error) {
     console.error("Error adding to cart:", error);
     throw error;
@@ -550,505 +245,608 @@ export const addToCart = async (userId, productId, quantity = 1) => {
 };
 
 /**
- * Get user's cart
- * @param {string} userId - The user ID
- * @returns {Promise<Object>} - The cart data
- */
-export const getCart = async (userId) => {
-  try {
-    const cartRef = doc(db, "carts", userId);
-    const cartSnap = await getDoc(cartRef);
-    
-    if (cartSnap.exists()) {
-      return {
-        id: cartSnap.id,
-        ...cartSnap.data(),
-        createdAt: cartSnap.data().createdAt?.toDate() || new Date(),
-        updatedAt: cartSnap.data().updatedAt?.toDate() || new Date(),
-      };
-    } else {
-      // Return empty cart if not exists
-      return {
-        userId: userId,
-        items: [],
-        totalAmount: 0
-      };
-    }
-  } catch (error) {
-    console.error("Error getting cart:", error);
-    throw error;
-  }
-};
-
-/**
- * Remove item from cart
- * @param {string} userId - The user ID
- * @param {string} productId - The product ID to remove
+ * Update quantity of a cart item
+ * @param {string} userId 
+ * @param {string} productId 
+ * @param {number} quantity 
  * @returns {Promise<void>}
  */
-export const removeFromCart = async (userId, productId) => {
+export const updateCartItemQuantity = async (userId, productId, quantity) => {
+  if (!userId) throw new Error("User ID is required");
+  if (!productId) throw new Error("Product ID is required");
+  if (quantity <= 0) throw new Error("Quantity must be greater than 0");
+  
   try {
     const cartRef = doc(db, "carts", userId);
-    const cartSnap = await getDoc(cartRef);
+    const cartDoc = await getDoc(cartRef);
     
-    if (cartSnap.exists()) {
-      const cartData = cartSnap.data();
-      const itemToRemove = cartData.items.find(item => item.productId === productId);
-      
-      if (!itemToRemove) {
-        throw new Error("Item not found in cart");
-      }
-      
-      const updatedItems = cartData.items.filter(item => item.productId !== productId);
-      const newTotalAmount = cartData.totalAmount - itemToRemove.totalPrice;
+    if (!cartDoc.exists()) {
+      throw new Error("Cart not found");
+    }
+    
+    // Check product stock
+    const productDoc = await getDoc(doc(db, "products", productId));
+    if (!productDoc.exists()) {
+      throw new Error("Product not found");
+    }
+    
+    const productData = productDoc.data();
+    if (quantity > productData.stock) {
+      quantity = productData.stock;
+    }
+    
+    // Update the cart item quantity
+    const cartData = cartDoc.data();
+    const items = cartData.items || [];
+    const existingItemIndex = items.findIndex(item => item.productId === productId);
+    
+    if (existingItemIndex >= 0) {
+      const updatedItems = [...items];
+      updatedItems[existingItemIndex].quantity = quantity;
       
       await updateDoc(cartRef, {
         items: updatedItems,
-        totalAmount: newTotalAmount,
         updatedAt: serverTimestamp()
       });
-    }
-  } catch (error) {
-    console.error("Error removing from cart:", error);
-    throw error;
-  }
-};
-
-/**
- * Get featured products
- * @param {number} limitCount - Optional limit of products to retrieve
- * @returns {Promise<Array>} - Array of featured products
- */
-export const getFeaturedProducts = async (limitCount = 8) => {
-  try {
-    const q = query(
-      collection(db, "products"),
-      where("isFeature", "==", true),
-      where("stock", ">", 0),
-      limit(limitCount)
-    );
-    
-    const querySnapshot = await getDocs(q);
-    const products = [];
-    
-    querySnapshot.forEach((doc) => {
-      products.push({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-        updatedAt: doc.data().updatedAt?.toDate() || new Date(),
-      });
-    });
-    
-    return products;
-  } catch (error) {
-    console.error("Error getting featured products:", error);
-    throw error;
-  }
-};
-
-/**
- * Get new arrival products
- * @param {number} limitCount - Optional limit of products to retrieve
- * @returns {Promise<Array>} - Array of new arrival products
- */
-export const getNewArrivals = async (limitCount = 8) => {
-  try {
-    const q = query(
-      collection(db, "products"),
-      where("isNewArrival", "==", true),
-      where("stock", ">", 0),
-      orderBy("createdAt", "desc"),
-      limit(limitCount)
-    );
-    
-    const querySnapshot = await getDocs(q);
-    const products = [];
-    
-    querySnapshot.forEach((doc) => {
-      products.push({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-        updatedAt: doc.data().updatedAt?.toDate() || new Date(),
-      });
-    });
-    
-    return products;
-  } catch (error) {
-    console.error("Error getting new arrivals:", error);
-    throw error;
-  }
-};
-
-
-
-
-// Add these functions to your userService.js file
-
-/**
- * Get user profile data
- * @param {string} userId - The user ID
- * @returns {Promise<Object>} - The user profile data
- */
-export const getUserProfile = async (userId) => {
-    try {
-      const userRef = doc(db, "users", userId);
-      const userSnap = await getDoc(userRef);
       
-      if (userSnap.exists()) {
-        return {
-          id: userSnap.id,
-          ...userSnap.data(),
-          createdAt: userSnap.data().createdAt?.toDate() || new Date(),
-          updatedAt: userSnap.data().updatedAt?.toDate() || new Date(),
-        };
-      } else {
-        // Create a new profile if it doesn't exist
-        const newUserProfile = {
-          userId: userId,
-          displayName: "",
-          phoneNumber: "",
-          address: {
-            street: "",
-            city: "",
-            state: "",
-            zipCode: "",
-            country: ""
-          },
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        };
-        
-        // Set the new profile in Firestore
-        await setDoc(userRef, newUserProfile);
-        
-        return newUserProfile;
-      }
-    } catch (error) {
-      console.error("Error getting user profile:", error);
-      throw error;
+      return true;
+    } else {
+      throw new Error("Product not found in cart");
     }
-  };
-  
-  /**
-   * Update user profile
-   * @param {string} userId - The user ID
-   * @param {Object} profileData - The profile data to update
-   * @returns {Promise<void>}
-   */
-  export const updateUserProfile = async (userId, profileData) => {
-    try {
-      const userRef = doc(db, "users", userId);
-      
-      // Update profile data in Firestore
-      await updateDoc(userRef, {
-        ...profileData,
-        updatedAt: serverTimestamp()
-      });
-    } catch (error) {
-      console.error("Error updating user profile:", error);
-      throw error;
-    }
-  };
+  } catch (error) {
+    console.error("Error updating cart item quantity:", error);
+    throw error;
+  }
+};
 
-
-
-
-  // amazon like features for recomendation 
-
-  /**
- * Save search term to user's search history
- * @param {string} userId - The user ID
- * @param {string} searchTerm - The search term to save
+/**
+ * Remove an item from the cart
+ * @param {string} userId 
+ * @param {string} productId 
  * @returns {Promise<void>}
  */
-
-// Add these functions to your userService.js file
-
-// Get user's recent cart items
-export const getRecentCartItems = async (userId) => {
+export const removeFromCart = async (userId, productId) => {
+  if (!userId) throw new Error("User ID is required");
+  if (!productId) throw new Error("Product ID is required");
+  
   try {
-    const cartRef = collection(db, "users", userId, "cart");
-    const querySnapshot = await getDocs(query(cartRef, orderBy("addedAt", "desc"), limit(10)));
+    const cartRef = doc(db, "carts", userId);
+    const cartDoc = await getDoc(cartRef);
     
-    const cartItems = [];
-    querySnapshot.forEach((doc) => {
-      cartItems.push({
-        id: doc.id,
-        productId: doc.data().productId,
-        addedAt: doc.data().addedAt,
-      });
+    if (!cartDoc.exists()) {
+      throw new Error("Cart not found");
+    }
+    
+    const cartData = cartDoc.data();
+    const items = cartData.items || [];
+    const updatedItems = items.filter(item => item.productId !== productId);
+    
+    await updateDoc(cartRef, {
+      items: updatedItems,
+      updatedAt: serverTimestamp()
     });
     
-    return cartItems;
+    return true;
   } catch (error) {
-    console.error("Error getting cart items:", error);
+    console.error("Error removing item from cart:", error);
     throw error;
   }
 };
 
-// Get user's wishlist items
-export const getWishlistItems = async (userId) => {
+/**
+ * Clear all items from the cart
+ * @param {string} userId 
+ * @returns {Promise<void>}
+ */
+export const clearCart = async (userId) => {
+  if (!userId) throw new Error("User ID is required");
+  
   try {
-    const wishlistRef = collection(db, "users", userId, "wishlist");
-    const querySnapshot = await getDocs(query(wishlistRef, orderBy("addedAt", "desc")));
+    const cartRef = doc(db, "carts", userId);
+    const cartDoc = await getDoc(cartRef);
     
-    const wishlistItems = [];
-    querySnapshot.forEach((doc) => {
-      wishlistItems.push({
-        id: doc.id,
-        productId: doc.data().productId,
-        addedAt: doc.data().addedAt,
+    if (cartDoc.exists()) {
+      await updateDoc(cartRef, {
+        items: [],
+        updatedAt: serverTimestamp()
       });
-    });
+    }
     
-    return wishlistItems;
+    return true;
+  } catch (error) {
+    console.error("Error clearing cart:", error);
+    throw error;
+  }
+};
+
+// ----- Wishlist Operations -----
+
+/**
+ * Check if a product is in user's wishlist
+ * @param {string} userId 
+ * @param {string} productId 
+ * @returns {Promise<boolean>}
+ */
+export const isInWishlist = async (userId, productId) => {
+  if (!userId) throw new Error("User ID is required");
+  if (!productId) throw new Error("Product ID is required");
+  
+  try {
+    const wishlistRef = doc(db, "wishlists", userId);
+    const wishlistDoc = await getDoc(wishlistRef);
+    
+    if (!wishlistDoc.exists()) {
+      return false;
+    }
+    
+    const wishlistData = wishlistDoc.data();
+    const productIds = wishlistData.productIds || [];
+    
+    return productIds.includes(productId);
+  } catch (error) {
+    console.error("Error checking wishlist:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get user's wishlist with product details
+ * @param {string} userId 
+ * @returns {Promise<Array>} Array of wishlist items with product data
+ */
+export const getWishlistItems = async (userId) => {
+  if (!userId) throw new Error("User ID is required");
+  
+  try {
+    const wishlistRef = doc(db, "wishlists", userId);
+    const wishlistDoc = await getDoc(wishlistRef);
+    
+    if (!wishlistDoc.exists()) {
+      return [];
+    }
+    
+    const wishlistData = wishlistDoc.data();
+    const productIds = wishlistData.productIds || [];
+    
+    // Fetch product details for each item in wishlist
+    const wishlistProducts = await Promise.all(
+      productIds.map(async (productId) => {
+        const productDoc = await getDoc(doc(db, "products", productId));
+        if (productDoc.exists()) {
+          return {
+            id: productId,
+            ...productDoc.data()
+          };
+        }
+        return null;
+      })
+    );
+    
+    return wishlistProducts.filter(product => product !== null);
   } catch (error) {
     console.error("Error getting wishlist items:", error);
     throw error;
   }
 };
 
-// Generate personalized recommendations based on user data
-export const generateRecommendations = async (userId, allProducts) => {
+/**
+ * Add a product to user's wishlist
+ * @param {string} userId 
+ * @param {string} productId 
+ * @returns {Promise<void>}
+ */
+export const addToWishlist = async (userId, productId) => {
+  if (!userId) throw new Error("User ID is required");
+  if (!productId) throw new Error("Product ID is required");
+  
   try {
-    // Skip if no user is logged in
-    if (!userId) return [];
+    const wishlistRef = doc(db, "wishlists", userId);
+    const wishlistDoc = await getDoc(wishlistRef);
     
-    // Get user data
-    const searchHistory = await getSearchHistory(userId);
-    const cartItems = await getRecentCartItems(userId);
-    const wishlistItems = await getWishlistItems(userId);
-    
-    // Create a map to store product scores
-    const productScores = new Map();
-    
-    // Initialize scores for all products
-    allProducts.forEach(product => {
-      productScores.set(product.id, {
-        product,
-        score: 0,
-        matches: []
-      });
-    });
-    
-    // Extract keywords from search history
-    const searchTerms = searchHistory.map(item => item.term.toLowerCase());
-    
-    // Score products based on search history (most recent searches have more weight)
-    searchHistory.forEach((search, index) => {
-      const term = search.term.toLowerCase();
-      const recencyWeight = 1 - (index / (searchHistory.length || 1)) * 0.5; // 1.0 to 0.5 based on recency
+    if (wishlistDoc.exists()) {
+      // Check if product is already in wishlist
+      const wishlistData = wishlistDoc.data();
+      const productIds = wishlistData.productIds || [];
       
-      allProducts.forEach(product => {
-        let matched = false;
-        const productData = productScores.get(product.id);
-        
-        // Check if search term appears in product name or description
-        if (product.name.toLowerCase().includes(term)) {
-          productData.score += 3 * recencyWeight;
-          matched = true;
-        }
-        
-        if (product.description.toLowerCase().includes(term)) {
-          productData.score += 2 * recencyWeight;
-          matched = true;
-        }
-        
-        if (product.category.toLowerCase().includes(term)) {
-          productData.score += 3 * recencyWeight;
-          matched = true;
-        }
-        
-        if (matched) {
-          productData.matches.push(`search:${term}`);
-        }
-      });
-    });
-    
-    // Score products based on cart items
-    const cartProductIds = cartItems.map(item => item.productId);
-    cartProductIds.forEach(productId => {
-      // Find matching products with the same category
-      const cartProduct = allProducts.find(p => p.id === productId);
-      if (cartProduct) {
-        allProducts.forEach(product => {
-          if (product.id !== productId && product.category === cartProduct.category) {
-            const productData = productScores.get(product.id);
-            productData.score += 5;
-            productData.matches.push(`cart:${cartProduct.category}`);
-          }
+      if (!productIds.includes(productId)) {
+        // Add product to wishlist
+        await updateDoc(wishlistRef, {
+          productIds: arrayUnion(productId),
+          updatedAt: serverTimestamp()
         });
       }
-    });
-    
-    // Score products based on wishlist items
-    const wishlistProductIds = wishlistItems.map(item => item.productId);
-    wishlistProductIds.forEach(productId => {
-      // Find matching products with the same category
-      const wishlistProduct = allProducts.find(p => p.id === productId);
-      if (wishlistProduct) {
-        allProducts.forEach(product => {
-          if (product.id !== productId && product.category === wishlistProduct.category) {
-            const productData = productScores.get(product.id);
-            productData.score += 4;
-            productData.matches.push(`wishlist:${wishlistProduct.category}`);
-          }
-        });
-      }
-    });
-    
-    // Boost products that appear in both wishlist and search terms
-    searchTerms.forEach(term => {
-      wishlistProductIds.forEach(productId => {
-        const wishlistProduct = allProducts.find(p => p.id === productId);
-        if (wishlistProduct && 
-            (wishlistProduct.name.toLowerCase().includes(term) || 
-             wishlistProduct.description.toLowerCase().includes(term))) {
-          // Find similar products
-          allProducts.forEach(product => {
-            if (product.id !== productId && 
-                (product.name.toLowerCase().includes(term) || 
-                 product.description.toLowerCase().includes(term))) {
-              const productData = productScores.get(product.id);
-              productData.score += 3; // Extra boost for this overlap
-              productData.matches.push(`overlap:${term}`);
-            }
-          });
-        }
+    } else {
+      // Create new wishlist
+      await setDoc(wishlistRef, {
+        userId,
+        productIds: [productId],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       });
-    });
+    }
     
-    // Convert Map to array, sort by score, and return top recommendations
-    const recommendations = Array.from(productScores.values())
-      .filter(item => item.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .map(item => ({
-        ...item.product,
-        recommendationScore: item.score,
-        recommendationReason: item.matches
-      }));
-    
-    return recommendations;
+    return true;
   } catch (error) {
-    console.error("Error generating recommendations:", error);
-    return [];
+    console.error("Error adding to wishlist:", error);
+    throw error;
   }
 };
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/**
+ * Remove a product from user's wishlist
+ * @param {string} userId 
+ * @param {string} productId 
+ * @returns {Promise<void>}
+ */
+export const removeFromWishlist = async (userId, productId) => {
+  if (!userId) throw new Error("User ID is required");
+  if (!productId) throw new Error("Product ID is required");
   
-export const saveSearchHistory = async (userId, searchTerm) => {
-    if (!userId || !searchTerm || searchTerm.trim() === "") return;
+  try {
+    const wishlistRef = doc(db, "wishlists", userId);
+    const wishlistDoc = await getDoc(wishlistRef);
     
+    if (wishlistDoc.exists()) {
+      // Remove product from wishlist
+      await updateDoc(wishlistRef, {
+        productIds: arrayRemove(productId),
+        updatedAt: serverTimestamp()
+      });
+    }
+    
+    return true;
+  } catch (error) {
+    console.error("Error removing from wishlist:", error);
+    throw error;
+  }
+};
+
+/**
+ * Clear all items from the wishlist
+ * @param {string} userId 
+ * @returns {Promise<void>}
+ */
+export const clearWishlist = async (userId) => {
+  if (!userId) throw new Error("User ID is required");
+  
+  try {
+    const wishlistRef = doc(db, "wishlists", userId);
+    const wishlistDoc = await getDoc(wishlistRef);
+    
+    if (wishlistDoc.exists()) {
+      await updateDoc(wishlistRef, {
+        productIds: [],
+        updatedAt: serverTimestamp()
+      });
+    }
+    
+    return true;
+  } catch (error) {
+    console.error("Error clearing wishlist:", error);
+    throw error;
+  }
+};
+
+// ----- Order History Operations -----
+
+/**
+ * Get user's order history
+ * @param {string} userId 
+ * @returns {Promise<Array>} Array of orders
+ */
+export const getOrderHistory = async (userId) => {
+  if (!userId) throw new Error("User ID is required");
+  
+  try {
+    const ordersQuery = query(
+      collection(db, "orders"),
+      where("userId", "==", userId),
+      orderBy("createdAt", "desc")
+    );
+    
+    const ordersSnapshot = await getDocs(ordersQuery);
+    const orders = [];
+    
+    ordersSnapshot.forEach((doc) => {
+      orders.push({
+        id: doc.id,
+        ...doc.data()
+      });
+    });
+    
+    return orders;
+  } catch (error) {
+    console.error("Error getting order history:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get details of a specific order
+ * @param {string} orderId 
+ * @returns {Promise<Object>} Order data
+ */
+export const getOrderDetails = async (orderId) => {
+  if (!orderId) throw new Error("Order ID is required");
+  
+  try {
+    const orderDoc = await getDoc(doc(db, "orders", orderId));
+    
+    if (!orderDoc.exists()) {
+      throw new Error("Order not found");
+    }
+    
+    const orderData = orderDoc.data();
+    
+    // Fetch current product details for each order item
+    const itemsWithCurrentProductDetails = await Promise.all(
+      orderData.items.map(async (item) => {
+        const productDoc = await getDoc(doc(db, "products", item.productId));
+        if (productDoc.exists()) {
+          const currentProductData = productDoc.data();
+          return {
+            ...item,
+            currentProduct: {
+              id: item.productId,
+              ...currentProductData
+            }
+          };
+        }
+        return item;
+      })
+    );
+    
+    return {
+      id: orderId,
+      ...orderData,
+      itemsWithCurrentProductDetails
+    };
+  } catch (error) {
+    console.error("Error getting order details:", error);
+    throw error;
+  }
+}; 
+
+// Search History Operations
+export const getSearchHistory = async (userId) => {
+  try {
+    const searchHistoryRef = collection(db, 'userSearchHistory');
+    const q = query(
+      searchHistoryRef, 
+      where('userId', '==', userId)
+    );
+    
+    const snapshot = await getDocs(q);
+    
+    return snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+  } catch (error) {
+    console.error('Error getting search history:', error);
+    throw error;
+  }
+};
+
+export const saveSearchHistory = async (userId, searchTerm) => {
+  try {
+    const searchHistoryRef = collection(db, 'userSearchHistory');
+    
+    await addDoc(searchHistoryRef, {
+      userId,
+      searchTerm,
+      timestamp: serverTimestamp()
+    });
+  } catch (error) {
+    console.error('Error saving search history:', error);
+    throw error;
+  }
+};
+
+export const deleteSearchTerm = async (searchHistoryId) => {
+  try {
+    const searchHistoryRef = doc(db, 'userSearchHistory', searchHistoryId);
+    await deleteDoc(searchHistoryRef);
+  } catch (error) {
+    console.error('Error deleting search term:', error);
+    throw error;
+  }
+};
+
+// Add these new methods to your userService.js file
+
+/**
+ * Get product details by ID
+ * @param {string} productId 
+ * @returns {Promise<Object>} Product data
+ */
+export const getProductById = async (productId) => {
+  if (!productId) throw new Error("Product ID is required");
+  
+  try {
+    const productDoc = await getDoc(doc(db, "products", productId));
+    
+    if (!productDoc.exists()) {
+      throw new Error("Product not found");
+    }
+    
+    return {
+      id: productId,
+      ...productDoc.data()
+    };
+  } catch (error) {
+    console.error("Error getting product details:", error);
+    throw error;
+  }
+};
+
+/**
+ * Check if a product is in user's cart
+ * @param {string} userId 
+ * @param {string} productId 
+ * @returns {Promise<boolean>}
+ */
+export const isInCart = async (userId, productId) => {
+  if (!userId) throw new Error("User ID is required");
+  if (!productId) throw new Error("Product ID is required");
+  
+  try {
+    const cartRef = doc(db, "carts", userId);
+    const cartDoc = await getDoc(cartRef);
+    
+    if (!cartDoc.exists()) {
+      return false;
+    }
+    
+    const cartData = cartDoc.data();
+    const items = cartData.items || [];
+    
+    return items.some(item => item.productId === productId);
+  } catch (error) {
+    console.error("Error checking cart:", error);
+    throw error;
+  }
+};
+
+/**
+ * Get the quantity of a product in the user's cart
+ * @param {string} userId 
+ * @param {string} productId 
+ * @returns {Promise<number>} Quantity
+ */
+export const getCartItemQuantity = async (userId, productId) => {
+  if (!userId) throw new Error("User ID is required");
+  if (!productId) throw new Error("Product ID is required");
+  
+  try {
+    const cartRef = doc(db, "carts", userId);
+    const cartDoc = await getDoc(cartRef);
+    
+    if (!cartDoc.exists()) {
+      return 0;
+    }
+    
+    const cartData = cartDoc.data();
+    const items = cartData.items || [];
+    const item = items.find(item => item.productId === productId);
+    
+    return item ? item.quantity : 0;
+  } catch (error) {
+    console.error("Error getting cart item quantity:", error);
+    throw error;
+  }
+};
+export const getHealthierAlternatives = async (productId, category = null, limitCount = 5) => {
+  if (!productId) throw new Error("Product ID is required");
+  
+  try {
+    // Get the current product's details
+    const currentProduct = await getProductById(productId);
+    if (!currentProduct) return [];
+    
+    // Extract product information
+    const productName = (currentProduct.name || "").toLowerCase();
+    const productCategory = category || currentProduct.category || "";
+    const currentGrade = currentProduct.nutrition_grade_fr 
+      ? currentProduct.nutrition_grade_fr.toUpperCase() 
+      : "E";
+    
+    // Define better nutrition grades (only A, B, C)
+    const betterGrades = ['A', 'B', 'C', 'a', 'b', 'c'].filter(grade => {
+      const compareGrade = grade.toUpperCase();
+      return compareGrade < currentGrade;
+    });
+    
+    if (betterGrades.length === 0) return []; // Already best grade
+
+    console.log(`Looking for alternatives to ${productName} (${currentGrade}) in category ${productCategory}`);
+    console.log(`Better grades: ${betterGrades.join(', ')}`);
+    
+    // Collection reference
+    const productsRef = collection(db, "products");
+    let alternatives = [];
+    
+    // Strategy 1: First get ALL products with better nutrition
     try {
-      const userHistoryRef = doc(db, "userSearchHistory", userId);
-      const historySnap = await getDoc(userHistoryRef);
+      // Use a simple query that doesn't require composite index
+      // Just get all products with stock > 0
+      const healthyQuery = query(
+        productsRef,
+        where("stock", ">", 0)
+      );
       
-      const timestamp = new Date().toISOString();
+      const snapshot = await getDocs(healthyQuery);
+      console.log(`Found ${snapshot.size} products in stock`);
       
-      if (historySnap.exists()) {
-        // Get existing history and add new search term
-        const history = historySnap.data().searches || [];
+      // Filter and score products manually
+      const matchedProducts = [];
+      
+      snapshot.forEach(doc => {
+        if (doc.id === productId) return; // Skip current product
         
-        // Check if term already exists
-        const existingIndex = history.findIndex(item => item.term.toLowerCase() === searchTerm.toLowerCase());
+        const product = doc.data();
+        const productGrade = product.nutrition_grade_fr 
+          ? product.nutrition_grade_fr.toUpperCase() 
+          : null;
+          
+        // Skip products with no grade or worse/equal grade
+        if (!productGrade || productGrade >= currentGrade) return;
         
-        if (existingIndex !== -1) {
-          // Remove the existing entry to move it to the top
-          history.splice(existingIndex, 1);
+        // Product has better nutrition, calculate relevance score
+        let score = 0;
+        
+        // Check category match (highest relevance)
+        if (productCategory && product.category === productCategory) {
+          score += 100;
         }
         
-        // Add to beginning of array (newest first)
-        history.unshift({
-          term: searchTerm,
-          timestamp: timestamp
+        // Check name similarity
+        const productLowerName = (product.name || "").toLowerCase();
+        const terms = productName.split(/\s+/)
+          .map(term => term.replace(/[^a-z0-9]/g, ''))
+          .filter(term => term.length >= 3);
+          
+        terms.forEach(term => {
+          if (productLowerName.includes(term)) {
+            score += 20;
+          }
         });
         
-        // Keep only the 10 most recent searches
-        const updatedHistory = history.slice(0, 10);
+        // Boost score for better grades
+        if (productGrade === 'A') score += 30;
+        else if (productGrade === 'B') score += 20;
+        else if (productGrade === 'C') score += 10;
         
-        await updateDoc(userHistoryRef, {
-          searches: updatedHistory,
-          updatedAt: serverTimestamp()
+        // Add to matched products if relevant
+        if (score > 0) {
+          matchedProducts.push({
+            id: doc.id,
+            ...product,
+            score
+          });
+        }
+      });
+      
+      // Sort by relevance score
+      matchedProducts.sort((a, b) => b.score - a.score);
+      
+      // Take top matches
+      alternatives = matchedProducts
+        .slice(0, limitCount)
+        .map(product => {
+          const { score, ...rest } = product;
+          return rest;
         });
-      } else {
-        // Create new search history for user
-        await setDoc(userHistoryRef, {
-          userId: userId,
-          searches: [{
-            term: searchTerm,
-            timestamp: timestamp
-          }],
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-      }
+        
+      console.log(`Found ${matchedProducts.length} relevant alternatives, returning top ${alternatives.length}`);
+      
     } catch (error) {
-      console.error("Error saving search history:", error);
+      console.error("Error finding alternatives:", error);
     }
-  };
-  
-  /**
-   * Get user's search history
-   * @param {string} userId - The user ID
-   * @returns {Promise<Array>} - Array of search history items
-   */
-  export const getSearchHistory = async (userId) => {
-    if (!userId) return [];
     
-    try {
-      const userHistoryRef = doc(db, "userSearchHistory", userId);
-      const historySnap = await getDoc(userHistoryRef);
-      
-      if (historySnap.exists()) {
-        return historySnap.data().searches || [];
-      }
-      
-      return [];
-    } catch (error) {
-      console.error("Error getting search history:", error);
-      return [];
-    }
-  };
-  
-  /**
-   * Delete a search term from user's history
-   * @param {string} userId - The user ID
-   * @param {string} searchTerm - The search term to delete
-   * @returns {Promise<void>}
-   */
-  export const deleteSearchTerm = async (userId, searchTerm) => {
-    if (!userId || !searchTerm) return;
-    
-    try {
-      const userHistoryRef = doc(db, "userSearchHistory", userId);
-      const historySnap = await getDoc(userHistoryRef);
-      
-      if (historySnap.exists()) {
-        const history = historySnap.data().searches || [];
-        const updatedHistory = history.filter(item => item.term.toLowerCase() !== searchTerm.toLowerCase());
-        
-        await updateDoc(userHistoryRef, {
-          searches: updatedHistory,
-          updatedAt: serverTimestamp()
-        });
-      }
-    } catch (error) {
-      console.error("Error deleting search term:", error);
-    }
-  };
+    return alternatives;
+  } catch (error) {
+    console.error("Error getting healthier alternatives:", error);
+    return [];
+  }
+};

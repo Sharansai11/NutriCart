@@ -17,11 +17,14 @@ const Navbar = () => {
   };
 
   return (
-    <nav className="navbar navbar-expand-lg navbar-light" style={{ backgroundColor: "#7A72F3"}}>
+    <nav
+  className="navbar navbar-expand-lg navbar-dark"
+  style={{ backgroundColor: "#1F2937", padding: "0.8rem 1rem" }} // charcoal background
+>
       <div className="container-fluid">
         {/* Logo */}
         <Link className="navbar-brand text-uppercase fw-bold" to="/" style={{ fontSize: "1.8rem", color: "#fff" }}>
-          Logo
+          ShopWise
         </Link>
 
         {/* Navbar toggler for smaller screens */}
@@ -102,13 +105,14 @@ const Navbar = () => {
             <li className="nav-item">
               {currentUser ? (
                 <>
-                  <button
-                    className="nav-link text-uppercase fw-bold btn btn-link text-dark"
-                    onClick={handleLogout}
-                    style={{ fontSize: "1.1rem" }}
-                  >
-                    <i className="bi bi-box-arrow-right"></i> Logout
-                  </button>
+                 <button
+  className="nav-link text-uppercase fw-bold btn btn-link text-white"
+  onClick={handleLogout}
+  style={{ fontSize: "1.1rem" }}
+>
+  <i className="bi bi-box-arrow-right"></i> Logout
+</button>
+
                 </>
               ) : (
                 <>

@@ -1,7 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
-import { getProductById } from "../api/productService";
-import { FaArrowLeft, FaEdit, FaTrash, FaTag, FaStar, FaEye, FaShoppingCart } from "react-icons/fa";
+import { getProductById, deleteProduct } from "../api/productService";
+import { 
+  FaArrowLeft, FaEdit, FaTrash, FaTag, 
+  FaStar, FaLeaf, FaCarrot, FaBreadSlice,
+  FaInfo, FaClipboardList, FaChartBar
+} from "react-icons/fa";
 import { toast } from "react-toastify";
 
 const ViewProduct = () => {
@@ -9,280 +13,245 @@ const ViewProduct = () => {
   const navigate = useNavigate();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
 
   useEffect(() => {
     const fetchProduct = async () => {
       try {
-        setLoading(true);
         const productData = await getProductById(id);
         setProduct(productData);
       } catch (err) {
-        setError("Error loading product: " + err.message);
         toast.error("Error loading product");
+        navigate("/admin/my-products");
       } finally {
         setLoading(false);
       }
     };
-
     fetchProduct();
-  }, [id]);
+  }, [id, navigate]);
 
-  // Format currency
-  const formatCurrency = (price) => {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 0,
-    }).format(price);
-  };
-
-  // Format date
-  const formatDate = (timestamp) => {
-    if (!timestamp) return "N/A";
+  const handleDelete = async () => {
+    const confirmDelete = window.confirm(`Are you sure you want to delete "${product.name}"?\n\nThis action cannot be undone.`);
     
-    const date = new Date(timestamp);
-    return new Intl.DateTimeFormat('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    }).format(date);
+    if (confirmDelete) {
+      try {
+        await deleteProduct(id);
+        navigate("/admin/my-products");
+        toast.success("Product deleted successfully");
+      } catch (err) {
+        toast.error("Failed to delete product");
+      }
+    }
   };
 
-  if (loading) {
-    return (
-      <div className="container py-5 text-center">
-        <div className="spinner-border text-dark" role="status">
-          <span className="visually-hidden">Loading...</span>
-        </div>
-        <p className="mt-2">Loading product details...</p>
-      </div>
-    );
-  }
+  const getNutriScoreColor = (grade) => {
+    const colors = {
+      'a': 'bg-success text-white',
+      'b': 'bg-success bg-opacity-25 text-success', // light green
+      'c': 'bg-warning text-dark',
+      'd': 'bg-warning bg-opacity-50 text-dark',    // mild orange
+      'e': 'bg-danger text-white'
+    };
+    return colors[grade?.toLowerCase()] || 'bg-secondary text-white';
+  };
+  
 
-  if (error) {
-    return (
-      <div className="container py-5">
-        <div className="alert alert-danger">{error}</div>
-        <Link to="/admin/my-products" className="btn btn-dark">
-          <FaArrowLeft className="me-2" /> Back to Products
-        </Link>
-      </div>
-    );
-  }
-
-  if (!product) {
-    return (
-      <div className="container py-5">
-        <div className="alert alert-warning">Product not found</div>
-        <Link to="/admin/my-products" className="btn btn-dark">
-          <FaArrowLeft className="me-2" /> Back to Products
-        </Link>
-      </div>
-    );
-  }
-
-  // Calculate discount
-  const hasDiscount = product.basePrice > product.currentPrice;
-  const discountPercentage = hasDiscount 
-    ? Math.round(((product.basePrice - product.currentPrice) / product.basePrice) * 100) 
-    : 0;
+  if (loading) return <div className="text-center py-5">Loading...</div>;
+  if (!product) return <div className="text-center py-5">Product not found</div>;
 
   return (
-    <div className="container py-5">
-      {/* Header with actions */}
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>Product Details</h2>
-        <div className="d-flex gap-2">
-          <Link to="/admin/my-products" className="btn btn-outline-dark">
-            <FaArrowLeft className="me-2" /> Back
-          </Link>
-          <Link to={`/edit-product/${id}`} className="btn btn-outline-dark">
-            <FaEdit className="me-2" /> Edit
-          </Link>
-          <button 
-            onClick={() => {
-              if(window.confirm(`Are you sure you want to delete "${product.name}"?`)) {
-                // Handle delete logic here
-                navigate("/admin/my-products");
-                toast.success("Product deleted successfully");
-              }
-            }}
-            className="btn btn-outline-danger"
-          >
-            <FaTrash className="me-2" /> Delete
-          </button>
-        </div>
-      </div>
-
+    <div className="container-fluid py-4">
       <div className="row">
-        {/* Product image column */}
-        <div className="col-md-5">
-          <div className="card border-0 shadow-sm">
-            <div className="position-relative">
-              {product.isNewArrival && (
-                <span className="position-absolute top-0 start-0 badge bg-dark m-3 px-3 py-2">
-                  NEW ARRIVAL
-                </span>
-              )}
-              {hasDiscount && (
-                <span className="position-absolute top-0 end-0 badge bg-danger m-3 px-3 py-2">
-                  −{discountPercentage}%
-                </span>
-              )}
-              <img 
-                src={product.imageUrl || "https://placehold.co/600x400?text=No+Image"} 
-                alt={product.name}
-                className="card-img-top" 
-                style={{ height: "400px", objectFit: "contain", backgroundColor: "#f8f9fa" }}
-              />
+        {/* Left Column - Image and Basic Info */}
+        <div className="col-md-4">
+          {/* Product Image */}
+          <div className="card mb-4 shadow-sm">
+            <img 
+              src={product.imageUrl || 'https://placehold.co/400x400?text=No+Image'} 
+              alt={product.name} 
+              className="card-img-top"
+              style={{ height: '400px', objectFit: 'cover' }}
+            />
+            <div className="card-body text-center">
+              <h3 className="card-title">{product.name}</h3>
+              <p className="text-muted">{product.category}</p>
+            </div>
+          </div>
+
+          {/* Nutri-Score and Special Labels */}
+          <div className="card mb-4 shadow-sm">
+            <div className="card-header d-flex align-items-center">
+              <FaChartBar className="me-2" />
+              <h5 className="mb-0">Nutrition & Labels</h5>
             </div>
             <div className="card-body">
-              <div className="d-flex justify-content-around text-center">
-                <div>
-                  <div className="fw-bold text-dark">{product.viewCount || 0}</div>
-                  <div className="small text-muted">Views</div>
-                </div>
-                <div className="border-start border-end px-4">
-                  <div className="fw-bold text-dark">{product.purchaseCount || 0}</div>
-                  <div className="small text-muted">Sales</div>
-                </div>
-                <div>
-                  <div className="fw-bold text-dark">{product.stock}</div>
-                  <div className="small text-muted">In Stock</div>
+              {/* Nutri-Score */}
+              <div className="mb-3">
+                <h6>Nutri-Score</h6>
+                <span 
+                  className={`badge bg-${getNutriScoreColor(product.nutrition_grade_fr)} fs-6`}
+                >
+                  Grade {product.nutrition_grade_fr?.toUpperCase()} 
+                  {' '}({product.nutrition_score}%)
+                </span>
+              </div>
+
+              {/* Special Labels */}
+              <div>
+                <h6>Product Labels</h6>
+                <div className="d-flex flex-wrap gap-2">
+                  {product.organicCertified && (
+                    <span className="badge bg-success">
+                      <FaLeaf className="me-1" /> Organic
+                    </span>
+                  )}
+                  {product.veganFriendly && (
+                    <span className="badge bg-primary">
+                      <FaCarrot className="me-1" /> Vegan
+                    </span>
+                  )}
+                  {product.glutenFree && (
+                    <span className="badge bg-info">
+                      <FaBreadSlice className="me-1" /> Gluten Free
+                    </span>
+                  )}
+                  {product.isFeature && (
+                    <span className="badge bg-warning">
+                      <FaStar className="me-1" /> Featured
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
           </div>
+
+          {/* Product Metadata */}
+          <div className="card shadow-sm">
+            <div className="card-header d-flex align-items-center">
+              <FaInfo className="me-2" />
+              <h5 className="mb-0">Product Details</h5>
+            </div>
+            <ul className="list-group list-group-flush">
+              <li className="list-group-item d-flex justify-content-between">
+                <span>Stock</span>
+                <span className={`badge ${product.stock > 0 ? 'bg-success' : 'bg-danger'}`}>
+                  {product.stock} Available
+                </span>
+              </li>
+              <li className="list-group-item d-flex justify-content-between">
+                <span>Price</span>
+                <strong>₹{product.price}</strong>
+              </li>
+              <li className="list-group-item d-flex justify-content-between">
+                <span>Views</span>
+                <span>{product.viewCount || 0}</span>
+              </li>
+              <li className="list-group-item d-flex justify-content-between">
+                <span>Weight</span>
+                <span>{product.weight}g</span>
+              </li>
+            </ul>
+          </div>
         </div>
-        
-        {/* Product details column */}
-        <div className="col-md-7">
-          <div className="card border-0 shadow-sm h-100">
+
+        {/* Right Column - Detailed Information */}
+        <div className="col-md-8">
+          {/* Description */}
+          <div className="card mb-4 shadow-sm">
+            <div className="card-header d-flex align-items-center">
+              <FaClipboardList className="me-2" />
+              <h5 className="mb-0">Product Description</h5>
+            </div>
             <div className="card-body">
-              <div className="mb-3">
-                <span className="badge bg-secondary rounded-pill px-3 py-2">{product.category}</span>
-                {product.isFeature && (
-                  <span className="badge bg-success ms-2 rounded-pill px-3 py-2">Featured</span>
-                )}
-              </div>
-              
-              <h1 className="display-6 fw-bold">{product.name}</h1>
-              
-              <div className="d-flex align-items-baseline mt-3 mb-4">
-                <h2 className="text-dark me-3">{formatCurrency(product.currentPrice)}</h2>
-                {hasDiscount && (
-                  <h5 className="text-decoration-line-through text-muted">
-                    {formatCurrency(product.basePrice)}
-                  </h5>
-                )}
-                {product.stock > 0 ? (
-                  <span className="badge bg-success ms-auto px-3 py-2">In Stock</span>
-                ) : (
-                  <span className="badge bg-danger ms-auto px-3 py-2">Out of Stock</span>
-                )}
-              </div>
-              
-              <div className="mb-4">
-                <h5 className="border-bottom pb-2">Description</h5>
-                <p className="mb-0">{product.description}</p>
-              </div>
-              
-              {product.features && product.features.length > 0 && (
-                <div className="mb-4">
-                  <h5 className="border-bottom pb-2">Features</h5>
-                  <ul className="mb-0">
-                    {product.features.map((feature, index) => (
-                      <li key={index}>{feature}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              
-              {product.tags && product.tags.length > 0 && (
-                <div className="mb-4">
-                  <h5 className="border-bottom pb-2">Tags</h5>
-                  <div className="d-flex flex-wrap gap-2">
-                    {product.tags.map((tag, index) => (
-                      <span key={index} className="badge bg-light text-dark border py-2 px-3">
-                        <FaTag className="me-1" /> {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              {/* Additional details table */}
-              <div className="mb-4">
-                <h5 className="border-bottom pb-2">Additional Information</h5>
-                <table className="table table-striped">
-                  <tbody>
-                    <tr>
-                      <th style={{ width: "40%" }}>Weight</th>
-                      <td>{product.weight ? `${product.weight} kg` : "N/A"}</td>
-                    </tr>
-                    <tr>
-                      <th>Created</th>
-                      <td>{formatDate(product.createdAt)}</td>
-                    </tr>
-                    <tr>
-                      <th>Last Updated</th>
-                      <td>{formatDate(product.updatedAt)}</td>
-                    </tr>
-                    <tr>
-                      <th>Demand Score</th>
-                      <td>
-                        {product.demandScore ? (
-                          <div className="d-flex align-items-center">
-                            <FaStar className="text-warning me-1" />
-                            <span>{product.demandScore}/10</span>
-                          </div>
-                        ) : "N/A"}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-              
-              {/* Sales stats if available */}
-              {product.priceHistory && product.priceHistory.length > 0 && (
-                <div>
-                  <h5 className="border-bottom pb-2">Price History</h5>
-                  <div className="table-responsive">
-                    <table className="table table-sm">
-                      <thead className="table-light">
-                        <tr>
-                          <th>Date</th>
-                          <th>Price</th>
-                          <th>Reason</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {product.priceHistory.slice(0, 5).map((item, index) => (
-                          <tr key={index}>
-                            <td>{new Date(item.date).toLocaleDateString()}</td>
-                            <td>{formatCurrency(item.price)}</td>
-                            <td>{item.reason}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+              <p>{product.description}</p>
             </div>
-            
-            {/* Live product link */}
-            <div className="card-footer bg-light p-3">
-              <div className="d-flex align-items-center justify-content-between">
-                
-                <Link to="/admin/my-products" className="btn btn-dark">
-                  <FaArrowLeft className="me-2" /> Back to Products
-                </Link>
+          </div>
+
+          {/* Nutritional Information */}
+          <div className="card mb-4 shadow-sm">
+            <div className="card-header">
+              <h5 className="mb-0">Nutritional Information (per 100g)</h5>
+            </div>
+            <div className="card-body">
+              <div className="row g-3">
+                {[
+                  { label: 'Energy', value: product.energy_100g, unit: 'kcal' },
+                  { label: 'Fat', value: product.fat_100g, unit: 'g', 
+                    subLabel: `Sat. Fat: ${product['saturated-fat_100g']}g` },
+                  { label: 'Carbohydrates', value: product.carbohydrates_100g, unit: 'g', 
+                    subLabel: `Sugars: ${product.sugars_100g}g` },
+                  { label: 'Proteins', value: product.proteins_100g, unit: 'g' },
+                  { label: 'Fiber', value: product.fiber_100g, unit: 'g' },
+                  { label: 'Salt', value: product.salt_100g, unit: 'g', 
+                    subLabel: `Sodium: ${product.sodium_100g}mg` },
+                  { label: 'Iron', value: product.iron_100g, unit: 'mg' }
+                ].map(({ label, value, unit, subLabel }, index) => (
+                  <div key={index} className="col-md-4 col-lg-3">
+                    <div className="card h-100 border-0 shadow-sm">
+                      <div className="card-body text-center">
+                        <h6 className="text-muted">{label}</h6>
+                        <div className="fs-5 fw-bold">
+                          {value} {unit}
+                        </div>
+                        {subLabel && (
+                          <small className="text-muted d-block">
+                            {subLabel}
+                          </small>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
+          </div>
+
+          {/* Ingredients and Additives */}
+          <div className="card mb-4 shadow-sm">
+            <div className="card-header">
+              <h5 className="mb-0">Ingredients & Additives</h5>
+            </div>
+            <div className="card-body">
+              <div className="row">
+                <div className="col-md-8">
+                  <h6>Ingredients</h6>
+                  <p>{product.ingredients_text}</p>
+                </div>
+                <div className="col-md-4">
+                  <h6>Additives ({product.additives_n})</h6>
+                  <p>{product.additives || 'None'}</p>
+                  <h6>Allergens</h6>
+                  <p>{product.allergens || 'None'}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Tags */}
+          {product.tags && product.tags.length > 0 && (
+            <div className="card shadow-sm">
+              <div className="card-header">
+                <h5 className="mb-0">Tags</h5>
+              </div>
+              <div className="card-body">
+                <div className="d-flex flex-wrap gap-2">
+                  {product.tags.map((tag, index) => (
+                    <span key={index} className="badge bg-light text-dark">
+                      <FaTag className="me-1" /> {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="mt-4 d-flex gap-3">
+            <Link to={`/edit-product/${id}`} className="btn btn-primary">
+              <FaEdit className="me-2" /> Edit Product
+            </Link>
+            <button onClick={handleDelete} className="btn btn-danger">
+              <FaTrash className="me-2" /> Delete Product
+            </button>
           </div>
         </div>
       </div>

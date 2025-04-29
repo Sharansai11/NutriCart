@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../context/Authcontext";
 import { getProducts, deleteProduct } from "../api/productService";
-import { FaPlus, FaTrash, FaEdit, FaEye, FaChartLine, FaTag } from "react-icons/fa";
+import { FaPlus, FaTrash, FaEdit, FaEye, FaChartLine, FaTag, FaLeaf } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 
@@ -13,8 +13,8 @@ const Myproducts = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [productToDelete, setProductToDelete] = useState(null);
   const [categoryFilter, setCategoryFilter] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  
+  const [searchTerm, setSearchTerm] = useState(""); 
+
   // Get unique categories from products
   const categories = [...new Set(products.map((product) => product.category))];
 
@@ -34,8 +34,8 @@ const Myproducts = () => {
     } finally {
       setLoading(false);
     }
-  };
-
+  };  
+       
   // Handle product deletion
   const handleDeleteClick = (product) => {
     setProductToDelete(product);
@@ -48,8 +48,6 @@ const Myproducts = () => {
     try {
       setLoading(true);
       await deleteProduct(productToDelete.id);
-
-      // Update product list
       setProducts(products.filter((product) => product.id !== productToDelete.id));
       toast.success("Product deleted successfully!");
       setShowDeleteModal(false);
@@ -61,9 +59,10 @@ const Myproducts = () => {
       setLoading(false);
     }
   };
-
+ 
   // Format currency
   const formatCurrency = (price) => {
+    if (price === undefined || price === null || isNaN(price)) return "₹0";
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
@@ -71,22 +70,35 @@ const Myproducts = () => {
     }).format(price);
   };
 
+  // Get Nutri-Score badge color
+  const getNutriScoreColor = (grade) => {
+    if (!grade) return 'bg-secondary';
+    switch (grade.toUpperCase()) {
+      case 'A': return 'bg-success';
+      case 'B': return 'bg-success-light';
+      case 'C': return 'bg-warning';
+      case 'D': return 'bg-warning-dark';
+      case 'E': return 'bg-danger';
+      default: return 'bg-secondary';
+    }
+  };
+
   // Filter products
   const filteredProducts = products.filter((product) => {
     const matchesCategory = categoryFilter ? product.category === categoryFilter : true;
     const matchesSearch = searchTerm 
-      ? product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        product.description.toLowerCase().includes(searchTerm.toLowerCase())
+      ? product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        product.description?.toLowerCase().includes(searchTerm.toLowerCase())
       : true;
     
     return matchesCategory && matchesSearch;
-  });
+  }); 
 
   return (
     <div className="container py-4">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2>Product Management</h2>
-        <Link to="/admin/addproduct" className="btn btn-dark">
+        <Link to="/admin/addproduct" className="btn btn-success">
           <FaPlus className="me-2" /> Add Product
         </Link>
       </div>
@@ -97,12 +109,12 @@ const Myproducts = () => {
           <div className="row g-3">
             <div className="col-md-6">
               <div className="input-group">
-                <span className="input-group-text bg-dark text-white">
+                <span className="input-group-text bg-success text-white">
                   <FaEye />
                 </span>
                 <input
                   type="text"
-                  className="form-control border-dark"
+                  className="form-control border-success"
                   placeholder="Search products..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
@@ -111,7 +123,7 @@ const Myproducts = () => {
             </div>
             <div className="col-md-6">
               <select
-                className="form-select border-dark"
+                className="form-select border-success"
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
               >
@@ -127,13 +139,13 @@ const Myproducts = () => {
         </div>
       </div>
 
-      {/* Error Message */}
+      {/* Error Message */} 
       {error && <div className="alert alert-danger">{error}</div>}
 
       {/* Products Grid */}
       {loading ? (
         <div className="text-center py-5">
-          <div className="spinner-border text-dark" role="status">
+          <div className="spinner-border text-success" role="status">
             <span className="visually-hidden">Loading...</span>
           </div>
           <p className="mt-2">Loading products...</p>
@@ -158,115 +170,106 @@ const Myproducts = () => {
                     : "Add your first product to get started"
                 }
               </p>
-              <Link to="/admin/addproduct" className="btn btn-dark mt-3">
+              <Link to="/admin/addproduct" className="btn btn-success mt-3">
                 <FaPlus className="me-2" /> Add Product
               </Link>
             </div>
           ) : (
-            filteredProducts.map((product) => {
-              // Calculate discount
-              const hasDiscount = product.basePrice > product.currentPrice;
-              const discountPercentage = hasDiscount 
-                ? Math.round(((product.basePrice - product.currentPrice) / product.basePrice) * 100) 
-                : 0;
-              
-              return (
-                <div className="col-md-4 mb-4" key={product.id}>
-                  <div className="card shadow-sm h-100 border-0 rounded-3 overflow-hidden">
-                    {/* Product badges */}
-                    <div className="position-absolute d-flex justify-content-between w-100 px-3 pt-3 z-1">
+            filteredProducts.map((product) => (
+              <div className="col-md-4 mb-4" key={product.id}>
+                <div className="card shadow-sm h-100 border-0 rounded-3 overflow-hidden">
+                  {/* Product badges */}
+                  <div className="position-absolute d-flex justify-content-between w-100 px-3 pt-3 z-1">
+                    <div>
                       {product.isNewArrival && (
-                        <span className="badge bg-dark rounded-pill px-3 py-2">
+                        <span className="badge bg-dark rounded-pill px-3 py-2 me-2">
                           NEW ARRIVAL
                         </span>
                       )}
-                      {hasDiscount && (
-                        <span className="badge bg-danger rounded-pill ms-auto px-3 py-2">
-                          −{discountPercentage}%
+                      {product.nutrition_grade_fr && (
+                        <span className={`badge ${getNutriScoreColor(product.nutrition_grade_fr)} rounded-pill px-3 py-2`}>
+                          Nutri-Score {product.nutrition_grade_fr}
                         </span>
                       )}
                     </div>
-                    
-                    {/* Product image */}
-                    <div style={{ height: "200px", backgroundColor: "#f8f9fa" }}>
-                      <img
-                        src={product.imageUrl || "https://placehold.co/400x400?text=No+Image"}
-                        className="w-100 h-100"
-                        alt={product.name}
-                        style={{ objectFit: "contain" }}
-                      />
+                  </div>
+                  
+                  {/* Product image */}
+                  <div style={{ height: "200px", backgroundColor: "#f8f9fa" }}>
+                    <img
+                      src={product.imageUrl || "https://placehold.co/400x400?text=No+Image"}
+                      className="w-100 h-100"
+                      alt={product.name}
+                      style={{ objectFit: "contain" }}
+                    />
+                  </div>
+                  
+                  <div className="card-body d-flex flex-column">
+                    <div className="mb-2">
+                      <span className="badge bg-secondary rounded-pill">{product.category}</span>
+                      {product.organicCertified && (
+                        <span className="badge bg-success rounded-pill ms-1">
+                          <FaLeaf className="me-1" /> Organic
+                        </span>
+                      )}
+                      {product.glutenFree && (
+                        <span className="badge bg-info rounded-pill ms-1">Gluten-Free</span>
+                      )}
+                      {product.veganFriendly && (
+                        <span className="badge bg-primary rounded-pill ms-1">Vegan</span>
+                      )}
                     </div>
                     
-                    <div className="card-body d-flex flex-column">
-                      <div className="mb-2">
-                        <span className="badge bg-secondary rounded-pill">{product.category}</span>
+                    <h5 className="card-title fw-bold mb-1">{product.name}</h5>
+                    
+                    <p className="card-text small text-muted mb-2">
+                      {product.description && product.description.length > 60
+                        ? product.description.substring(0, 60) + "..."
+                        : product.description}
+                    </p>
+                    
+                    <div className="mt-auto">
+                      <div className="d-flex align-items-center justify-content-between mb-3">
+                        <div>
+                          <h5 className="mb-0 fw-bold">
+                            {formatCurrency(product.price)}
+                          </h5>
+                        </div>
+                        <div>
+                          <span className={`badge ${product.stock > 10 ? 'bg-success' : product.stock > 0 ? 'bg-warning' : 'bg-danger'} px-3 py-2`}>
+                            {product.stock > 0 ? `${product.stock} in Stock` : 'Out of Stock'}
+                          </span>
+                        </div>
                       </div>
                       
-                      <h5 className="card-title fw-bold mb-1">{product.name}</h5>
-                      
-                      <p className="card-text small text-muted mb-2">
-                        {product.description && product.description.length > 60
-                          ? product.description.substring(0, 60) + "..."
-                          : product.description}
-                      </p>
-                      
-                      <div className="mt-auto">
-                        <div className="d-flex align-items-center justify-content-between mb-3">
-                          <div>
-                            <h5 className="mb-0 fw-bold">{formatCurrency(product.currentPrice)}</h5>
-                            {hasDiscount && (
-                              <small className="text-decoration-line-through text-muted">
-                                {formatCurrency(product.basePrice)}
-                              </small>
-                            )}
-                          </div>
-                          <div>
-                            <span className={`badge ${product.stock > 10 ? 'bg-success' : product.stock > 0 ? 'bg-warning' : 'bg-danger'} px-3 py-2`}>
-                              {product.stock > 0 ? `${product.stock} in Stock` : 'Out of Stock'}
-                            </span>
-                          </div>
-                        </div>
-                        
-                        {/* Stats row */}
-                        <div className="d-flex justify-content-between text-muted small mb-3">
-                          <span>
-                            <FaEye className="me-1" /> {product.viewCount || 0}
-                          </span>
-                          <span>
-                            <FaTag className="me-1" /> {product.tags?.length || 0} tags
-                          </span>
-                          <span>
-                            <FaChartLine className="me-1" /> {product.purchaseCount || 0} sold
-                          </span>
-                        </div>
+                     
 
-                        {/* Actions */}
-                        <div className="d-flex gap-2">
-                          <Link 
-                            to={`/view-product/${product.id}`} 
-                            className="btn btn-outline-dark flex-grow-1"
-                          >
-                            <FaEye className="me-1" /> View
-                          </Link>
-                          <Link 
-                            to={`/edit-product/${product.id}`} 
-                            className="btn btn-outline-dark flex-grow-1"
-                          >
-                            <FaEdit className="me-1" /> Edit
-                          </Link>
-                          <button
-                            onClick={() => handleDeleteClick(product)}
-                            className="btn btn-outline-danger"
-                          >
-                            <FaTrash />
-                          </button>
-                        </div>
+                      {/* Actions */}
+                      <div className="d-flex gap-2">
+                        <Link 
+                          to={`/view-product/${product.id}`} 
+                          className="btn btn-outline-success flex-grow-1"
+                        >
+                          <FaEye className="me-1" /> View
+                        </Link>
+                        <Link 
+                          to={`/edit-product/${product.id}`} 
+                          className="btn btn-outline-primary flex-grow-1"
+                        >
+                          <FaEdit className="me-1" /> Edit
+                        </Link>
+                        <button
+                          onClick={() => handleDeleteClick(product)}
+                          className="btn btn-outline-danger"
+                        >
+                          <FaTrash />
+                        </button>
                       </div>
                     </div>
                   </div>
                 </div>
-              );
-            })
+              </div>
+            ))
           )}
         </div>
       )}

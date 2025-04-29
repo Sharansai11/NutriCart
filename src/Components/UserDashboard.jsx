@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/Authcontext";
-import { getProducts } from "../api/userService";
+import { getProducts } from "../api/productService";
 import { FaHome, FaShoppingCart, FaHeart, FaBox, FaUser, FaPlus, FaMinus } from "react-icons/fa";
 import ViewProducts from "./ViewProducts";
 
