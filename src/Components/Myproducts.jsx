@@ -70,19 +70,21 @@ const Myproducts = () => {
     }).format(price);
   };
 
-  // Get Nutri-Score badge color
+ 
   const getNutriScoreColor = (grade) => {
     if (!grade) return 'bg-secondary';
-    switch (grade.toUpperCase()) {
-      case 'A': return 'bg-success';
-      case 'B': return 'bg-success-light';
-      case 'C': return 'bg-warning';
-      case 'D': return 'bg-warning-dark';
-      case 'E': return 'bg-danger';
-      default: return 'bg-secondary';
-    }
+    
+    const colors = {
+      'A': 'bg-success',
+      'B': 'bg-success bg-opacity-50', // Very light green using Bootstrap
+      'C': 'bg-warning',
+      'D': 'bg-warning bg-opacity-50', // Using orange-like effect
+      'E': 'bg-danger'
+    };
+    
+    return colors[grade.toUpperCase()] || 'bg-secondary';
   };
-
+  
   // Filter products
   const filteredProducts = products.filter((product) => {
     const matchesCategory = categoryFilter ? product.category === categoryFilter : true;

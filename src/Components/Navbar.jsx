@@ -24,7 +24,7 @@ const Navbar = () => {
       <div className="container-fluid">
         {/* Logo */}
         <Link className="navbar-brand text-uppercase fw-bold" to="/" style={{ fontSize: "1.8rem", color: "#fff" }}>
-          ShopWise
+        NutriCart
         </Link>
 
         {/* Navbar toggler for smaller screens */}

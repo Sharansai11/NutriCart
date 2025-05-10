@@ -177,7 +177,7 @@ function Cart() {
   if (cartItems.length === 0) {
     return (
       <div className="container py-5">
-        <h1 className="mb-4">Your Cart</h1>
+        <h1 className="mb-4">Your Cart</h1> 
         <div className="text-center py-5 bg-light rounded-4 shadow-sm">
           <FaShoppingCart className="display-1 text-muted mb-3" />
           <h3>Your cart is empty</h3>

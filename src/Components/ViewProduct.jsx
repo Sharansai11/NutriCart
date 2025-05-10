@@ -91,7 +91,7 @@ const ViewProduct = () => {
                   className={`badge bg-${getNutriScoreColor(product.nutrition_grade_fr)} fs-6`}
                 >
                   Grade {product.nutrition_grade_fr?.toUpperCase()} 
-                  {' '}({product.nutrition_score}%)
+                  
                 </span>
               </div>
 

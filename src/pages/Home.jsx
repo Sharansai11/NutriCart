@@ -161,59 +161,7 @@ display: "flex",
 alignItems: "center",
 fontSize: "16px",
 };
-const gridStyle = (minWidth) => ({
-display: "grid",
-gridTemplateColumns: `repeat(auto-fit, minmax(${minWidth}px, 1fr))`,
-gap: "24px",
-});
-const featuredProducts = [
-{
-image:
-"https://images.unsplash.com/photo-1523275335684-37898b6baf30?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80",
-title: "Premium Smart Watch",
-price: 199.99,
-rating: 4.8,
-},
-{
-image:
-"https://images.unsplash.com/photo-1505740420928-5e560c06d30e?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80",
-title: "Wireless Headphones",
-price: 149.99,
-rating: 4.9,
-},
-{
-image:
-"https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80",
-title: "Camera Lens",
-price: 299.99,
-rating: 4.7,
-},
-{
-image:
-"https://images.unsplash.com/photo-1546868871-7041f2a55e12?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80",
-title: "Smart Speaker",
-price: 79.99,
-rating: 4.5,
-},
-];
-const categories = [
-{
-image:
-"https://images.unsplash.com/photo-1483985988355-763728e1935b?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80",
-title: "Fashion",
-},
-{
-image:
-"https://images.unsplash.com/photo-1498049794561-7780e7231661?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80",
-title: "Electronics",
-},
-{
-image:
-"https://images.unsplash.com/photo-1556228453-efd6c1ff04f6?ixlib=rb-1.2.1&auto=format&fit=crop&w=1000&q=80",
-title: "Home & Living",
-},
 
-];
 return (
 <div style={{ fontFamily: "Arial, sans-serif", color: "#333" }}>
 {/* Hero Section */}
@@ -222,10 +170,10 @@ return (
 <div style={{ ...containerStyle, ...heroContentStyle }}>
 <div>
 <h1 style={{ fontSize: "48px", fontWeight: "bold", marginBottom: "24px" }}>
-Discover Amazing Deals
+Good Food Good Life
 </h1>
 <p style={{ fontSize: "20px", marginBottom: "32px" }}>
-Shop the latest trends with unbeatable prices. Limited time offers available now!
+Get the best food products with unbeatable prices. Limited time offers available now!
 </p>
 <Link
 to="/login"
@@ -245,34 +193,7 @@ Shop Now
 </div>
 </div>
 </div>
-{/* Categories Section */}
-<div style={{ padding: "64px 0" }}>
-<div style={{ ...containerStyle, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }}>
-<h2 style={sectionTitleStyle}>Shop by Category</h2>
-<Link to="/login" style={linkStyle}>
-View All <ChevronRight size={20} style={{ marginLeft: "4px" }} />
-</Link>
-</div>
-<div style={{ ...containerStyle, ...gridStyle(200) }}>
-{categories.map((category, index) => (
-<CategoryCard key={index} {...category} />
-))}
-</div>
-</div>
-{/* Featured Products Section */}
-<div style={{ padding: "64px 0", backgroundColor: "#f9f9f9" }}>
-<div style={{ ...containerStyle, display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }}>
-<h2 style={sectionTitleStyle}>Featured Products</h2>
-<Link to="/login" style={linkStyle}>
-View All <ChevronRight size={20} style={{ marginLeft: "4px" }} />
-</Link>
-</div>
-<div style={{ ...containerStyle, ...gridStyle(250) }}>
-{featuredProducts.map((product, index) => (
-<ProductCard key={index} {...product} />
-))}
-</div>
-</div>
+
 {/* Promotion Banner */}
 <div style={{ backgroundColor: "#4F46E5", padding: "64px 0" }}>
 <div style={{ ...containerStyle, display: "flex", flexDirection: "column", alignItems: "center", gap: "24px" }}>

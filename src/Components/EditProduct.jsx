@@ -675,18 +675,6 @@ const EditProduct = () => {
                 />
               </div>
 
-              <div className="col-md-4 mb-3">
-                <label htmlFor="nutrition_score" className="form-label">Confidence Score</label>
-                <input
-                  type="number"
-                  id="nutrition_score"
-                  name="nutrition_score"
-                  className="form-control"
-                  value={formData.nutrition_score}
-                  onChange={handleChange}
-                  readOnly
-                />
-              </div>
 
               <div className="col-md-4 mb-3">
                 <button
