@@ -68,7 +68,6 @@ const Register = () => {
             <div className="card-body p-5">
               <div className="text-center mb-4">
                 <h2 className="fw-bold mb-0">Create Account</h2>
-                <p className="text-muted">Join ShopSavvy to start shopping</p>
               </div>
 
               {errorMessage && (
