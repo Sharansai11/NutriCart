@@ -10,7 +10,7 @@ boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
 overflow: "hidden",
 transition: "transform 0.3s",
 cursor: "pointer",
-};
+};     
 const imageStyle = {
 width: "100%",
 height: "256px",

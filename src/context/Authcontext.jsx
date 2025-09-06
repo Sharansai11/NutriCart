@@ -52,10 +52,10 @@ export function AuthProvider({ children }) {
       return "user"; // Default role if not set
     } catch (err) {
       console.error("Error checking user role:", err);
-      return "user"; // Default role on error
+      return "user"; // Default role on error   
     }
-  }
-
+  }  
+ 
   // Login a user and verify the role (if needed)
   async function login(email, password, selectedRole = "user") {
     try {
@@ -68,7 +68,7 @@ export function AuthProvider({ children }) {
         { lastLogin: serverTimestamp() }, 
         { merge: true }
       );
-      
+
       // Verify user role
       const role = await checkUserRole(userCredential.user.uid);
       if (role !== selectedRole) {
